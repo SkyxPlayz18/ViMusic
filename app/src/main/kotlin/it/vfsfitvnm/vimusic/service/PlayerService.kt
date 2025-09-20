@@ -503,9 +503,14 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
         mediaItemState.update { mediaItem }
 
         mediaItem?.let { newItem ->
-            coroutineScope.launch {
-                Database.instance.updateSongMetadata
-            }
+    coroutineScope.launch {
+        Database.instance.updateSongMetadata(
+            id = newItem.mediaId,
+            title = newItem.mediaMetadata.title?.toString(),
+            artist = newItem.mediaMetadata.artist?.toString(),
+            duration = newItem.mediaMetadata.extras?.getLong("duration") // kalau ada
+        )
+    }
         }
 
         maybeRecoverPlaybackError()
