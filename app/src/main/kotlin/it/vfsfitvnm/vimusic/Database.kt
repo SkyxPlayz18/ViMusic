@@ -836,13 +836,16 @@ interface Database {
     }
 }
 
-@Query("""
-UPDATE Song 
+@Transaction
+@Query(
+    """UPDATE Song 
 SET title = :title, 
     artist = :artist, 
     duration = :duration 
 WHERE id = :id
-""")
+"""
+    )
+
 suspend fun updateSongMetadata(
     id: String,
     title: String?,
