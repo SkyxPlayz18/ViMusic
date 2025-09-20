@@ -390,7 +390,7 @@ interface Database {
     fun playlistWithSongs(id: Long): Flow<PlaylistWithSongs?>
 
     @Query("SELECT MIN(position) FROM SongPlaylistMap WHERE playlistId = :playlistId")
-suspend fun getMinPosition(playlistId: Long): Int?
+    fun getMinPosition(playlistId: Long): Int?
 
     @Transaction
     @Query(
