@@ -747,6 +747,20 @@ interface Database {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(pipedSession: PipedSession)
 
+    @Query("""
+    UPDATE Song 
+    SET title = :title, 
+        artist = :artist, 
+        duration = :duration 
+    WHERE id = :id
+""")
+suspend fun updateSongMetadata(
+    id: String,
+    title: String?,
+    artist: String?,
+    duration: Long?
+)
+
     @Transaction
     fun insert(mediaItem: MediaItem, block: (Song) -> Song = { it }) {
         val extras = mediaItem.mediaMetadata.extras?.songBundle
@@ -835,23 +849,6 @@ interface Database {
         raw(SimpleSQLiteQuery("PRAGMA wal_checkpoint(FULL)"))
     }
 }
-
-@Transaction
-@Query(
-    """UPDATE Song 
-SET title = :title, 
-    artist = :artist, 
-    duration = :duration 
-WHERE id = :id
-"""
-    )
-
-suspend fun updateSongMetadata(
-    id: String,
-    title: String?,
-    artist: String?,
-    duration: Long?
-)
 
 @androidx.room.Database(
     entities = [
