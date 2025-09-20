@@ -102,32 +102,36 @@ fun PlaylistSongList(
         initialTextInput = playlistPage?.title.orEmpty(),
         onDismiss = { isImportingPlaylist = false },
         onAccept = { text ->
-            query {
-                transaction {
-                    val playlistId = Database.instance.insert(
-                        Playlist(
-                            name = text,
-                            browseId = browseId,
-                            thumbnail = playlistPage?.thumbnail?.url
-                        )
-                    )
+    query {
+        transaction {
+            val playlistId = Database.instance.insert(
+                Playlist(
+                    name = text,
+                    browseId = browseId,
+                    thumbnail = playlistPage?.thumbnail?.url
+                )
+            )
 
-                    playlistPage?.songsPage?.items
-                        ?.map(Innertube.SongItem::asMediaItem)
-                        ?.onEach(Database.instance::insert)
-                        ?.mapIndexed { index, mediaItem ->
-    val minPos = Database.instance.getMinPosition(playlistId) ?: 0
-    SongPlaylistMap(
-        songId = mediaItem.mediaId,
-        playlistId = playlistId,
-        position = minPos - 1 - index // supaya item baru ada di atas
-    )
-                        }
-                        }?.let(Database.instance::insertSongPlaylistMaps)
-                }
+            val mediaItems = playlistPage?.songsPage?.items
+                ?.map(Innertube.SongItem::asMediaItem)
+                .orEmpty()
+
+            mediaItems.forEach { Database.instance.insert(it) }
+
+            val currentMin = Database.instance.getMinPosition(playlistId) ?: 0
+
+            val maps = mediaItems.mapIndexed { index, mediaItem ->
+                SongPlaylistMap(
+                    songId = mediaItem.mediaId,
+                    playlistId = playlistId,
+                    position = currentMin - 1 - index
+                )
             }
+
+            if (maps.isNotEmpty()) Database.instance.insertSongPlaylistMaps(maps)
         }
-    )
+    }
+        }
 
     val headerContent: @Composable () -> Unit = {
         if (playlistPage == null) HeaderPlaceholder(modifier = Modifier.shimmer())
