@@ -116,11 +116,13 @@ fun PlaylistSongList(
                         ?.map(Innertube.SongItem::asMediaItem)
                         ?.onEach(Database.instance::insert)
                         ?.mapIndexed { index, mediaItem ->
-                            SongPlaylistMap(
-                                songId = mediaItem.mediaId,
-                                playlistId = playlistId,
-                                position = index
-                            )
+    val minPos = Database.instance.getMinPosition(playlistId) ?: 0
+    SongPlaylistMap(
+        songId = mediaItem.mediaId,
+        playlistId = playlistId,
+        position = minPos - 1 - index // supaya item baru ada di atas
+    )
+                        }
                         }?.let(Database.instance::insertSongPlaylistMaps)
                 }
             }
