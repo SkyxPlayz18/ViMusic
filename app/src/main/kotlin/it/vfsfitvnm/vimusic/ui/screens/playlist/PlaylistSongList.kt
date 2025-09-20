@@ -98,40 +98,42 @@ fun PlaylistSongList(
     var isImportingPlaylist by rememberSaveable { mutableStateOf(false) }
 
     if (isImportingPlaylist) TextFieldDialog(
-        hintText = stringResource(R.string.enter_playlist_name_prompt),
-        initialTextInput = playlistPage?.title.orEmpty(),
-        onDismiss = { isImportingPlaylist = false },
-        onAccept = { text ->
-    query {
-        transaction {
-            val playlistId = Database.instance.insert(
-                Playlist(
-                    name = text,
-                    browseId = browseId,
-                    thumbnail = playlistPage?.thumbnail?.url
+        TextFieldDialog(
+    hintText = stringResource(R.string.enter_playlist_name_prompt),
+    initialTextInput = playlistPage?.title.orEmpty(),
+    onDismiss = { isImportingPlaylist = false },
+    onAccept = { text ->
+        query {
+            transaction {
+                val playlistId = Database.instance.insert(
+                    Playlist(
+                        name = text,
+                        browseId = browseId,
+                        thumbnail = playlistPage?.thumbnail?.url
+                    )
                 )
-            )
 
-            val mediaItems = playlistPage?.songsPage?.items
-                ?.map(Innertube.SongItem::asMediaItem)
-                .orEmpty()
+                val mediaItems = playlistPage?.songsPage?.items
+                    ?.map(Innertube.SongItem::asMediaItem)
+                    .orEmpty()
 
-            mediaItems.forEach { Database.instance.insert(it) }
+                mediaItems.forEach { Database.instance.insert(it) }
 
-            val currentMin = Database.instance.getMinPosition(playlistId) ?: 0
+                val currentMin = Database.instance.getMinPosition(playlistId) ?: 0
 
-            val maps = mediaItems.mapIndexed { index, mediaItem ->
-                SongPlaylistMap(
-                    songId = mediaItem.mediaId,
-                    playlistId = playlistId,
-                    position = currentMin - 1 - index
-                )
+                val maps = mediaItems.mapIndexed { index, mediaItem ->
+                    SongPlaylistMap(
+                        songId = mediaItem.mediaId,
+                        playlistId = playlistId,
+                        position = currentMin - 1 - index
+                    )
+                }
+
+                if (maps.isNotEmpty()) Database.instance.insertSongPlaylistMaps(maps)
             }
-
-            if (maps.isNotEmpty()) Database.instance.insertSongPlaylistMaps(maps)
         }
     }
-        }
+) // <- JANGAN LUPA tutup ini
 
     val headerContent: @Composable () -> Unit = {
         if (playlistPage == null) HeaderPlaceholder(modifier = Modifier.shimmer())
