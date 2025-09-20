@@ -504,7 +504,7 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
 
         mediaItem?.let { newItem ->
             coroutineScope.launch {
-                Database.instance.insert(newItem)
+                Database.instance.updateSongMetadata
             }
         }
 
