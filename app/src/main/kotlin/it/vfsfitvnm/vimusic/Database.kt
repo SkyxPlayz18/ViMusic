@@ -836,6 +836,20 @@ interface Database {
     }
 }
 
+@Query("""
+UPDATE Song 
+SET title = :title, 
+    artist = :artist, 
+    duration = :duration 
+WHERE id = :id
+""")
+suspend fun updateSongMetadata(
+    id: String,
+    title: String?,
+    artist: String?,
+    duration: Long?
+)
+
 @androidx.room.Database(
     entities = [
         Song::class,
