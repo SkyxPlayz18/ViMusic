@@ -748,17 +748,22 @@ interface Database {
     fun insert(pipedSession: PipedSession)
 
     @Query("""
-    UPDATE Song 
-    SET title = :title, 
-        artist = :artist, 
-        duration = :duration 
+    UPDATE Song
+    SET 
+        title = :title,
+        artistsText = :artistsText,
+        durationText = :durationText,
+        thumbnailUrl = :thumbnailUrl,
+        album = :album
     WHERE id = :id
 """)
 suspend fun updateSongMetadata(
     id: String,
-    title: String?,
-    artist: String?,
-    duration: Long?
+    title: String,
+    artistsText: String?,
+    durationText: String?,
+    thumbnailUrl: String?,
+    album: String?
 )
 
     @Transaction
