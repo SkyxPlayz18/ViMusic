@@ -97,8 +97,8 @@ fun PlaylistSongList(
 
     var isImportingPlaylist by rememberSaveable { mutableStateOf(false) }
 
-    if (isImportingPlaylist) TextFieldDialog(
-        TextFieldDialog(
+    if (isImportingPlaylist) {
+    TextFieldDialog(
     hintText = stringResource(R.string.enter_playlist_name_prompt),
     initialTextInput = playlistPage?.title.orEmpty(),
     onDismiss = { isImportingPlaylist = false },
