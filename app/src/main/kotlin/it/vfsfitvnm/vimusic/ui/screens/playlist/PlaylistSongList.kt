@@ -125,7 +125,7 @@ fun PlaylistSongList(
                     SongPlaylistMap(
                         songId = mediaItem.mediaId,
                         playlistId = playlistId,
-                        position = currentMin - 1 - index
+                        position = minPos - 1
                     )
                 }
 
