@@ -251,8 +251,25 @@ private fun ModernControls(
         BigIconButton(
             iconId = if (likedAt == null) R.drawable.heart_outline else R.drawable.heart,
             onClick = {
-                setLikedAt(if (likedAt == null) System.currentTimeMillis() else null)
-            },
+    query {
+        val newLikedAt = if (likedAt == null) System.currentTimeMillis() else null
+
+        // coba UPDATE dulu; jika ada baris yang diubah (rows != 0) berarti song sudah ada
+        val rows = Database.instance.like(
+            songId = media.id,
+            likedAt = newLikedAt
+        )
+
+        if (rows != 0) {
+            withContext(Dispatchers.Main) { setLikedAt(newLikedAt) }
+            return@query
+        }
+
+        // kalau UPDATE tidak memodifikasi baris, INSERT media lalu toggle like
+        Database.instance.insert(media.asMediaItem, Song::toggleLike)
+
+        withContext(Dispatchers.Main) { setLikedAt(newLikedAt) }
+    },
             modifier = Modifier.weight(1f)
         )
     }
