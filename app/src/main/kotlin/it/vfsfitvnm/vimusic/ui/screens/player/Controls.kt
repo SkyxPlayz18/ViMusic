@@ -53,9 +53,6 @@ import it.vfsfitvnm.core.ui.utils.px
 import it.vfsfitvnm.core.ui.utils.roundedShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import it.vfsfitvnm.vimusic.query
-import it.vfsfitvnm.vimusic.models.Song
-import it.vfsfitvnm.vimusic.utils.asMediaItem
 
 private val DefaultOffset = 24.dp
 
@@ -144,25 +141,7 @@ private fun ClassicControls(
                 icon = if (likedAt == null) R.drawable.heart_outline else R.drawable.heart,
                 color = colorPalette.favoritesIcon,
                 onClick = {
-    query {
-        val newLikedAt = if (likedAt == null) System.currentTimeMillis() else null
-
-        // coba UPDATE dulu; jika ada baris yang diubah (rows != 0) berarti song sudah ada
-        val rows = Database.instance.like(
-            songId = media.id,
-            likedAt = newLikedAt
-        )
-
-        if (rows != 0) {
-            withContext(Dispatchers.Main) { setLikedAt(newLikedAt) }
-            return@query
-        }
-
-        // kalau UPDATE tidak memodifikasi baris, INSERT media lalu toggle like
-        Database.instance.insert(media.asMediaItem, Song::toggleLike)
-
-        withContext(Dispatchers.Main) { setLikedAt(newLikedAt) }
-    }
+                    setLikedAt(if (likedAt == null) System.currentTimeMillis() else null)
                 },
                 modifier = Modifier
                     .weight(1f)
@@ -251,25 +230,8 @@ private fun ModernControls(
         BigIconButton(
             iconId = if (likedAt == null) R.drawable.heart_outline else R.drawable.heart,
             onClick = {
-    query {
-        val newLikedAt = if (likedAt == null) System.currentTimeMillis() else null
-
-        // coba UPDATE dulu; jika ada baris yang diubah (rows != 0) berarti song sudah ada
-        val rows = Database.instance.like(
-            songId = media.id,
-            likedAt = newLikedAt
-        )
-
-        if (rows != 0) {
-            withContext(Dispatchers.Main) { setLikedAt(newLikedAt) }
-            return@query
-        }
-
-        // kalau UPDATE tidak memodifikasi baris, INSERT media lalu toggle like
-        Database.instance.insert(media.asMediaItem, Song::toggleLike)
-
-        withContext(Dispatchers.Main) { setLikedAt(newLikedAt) }
-    },
+                setLikedAt(if (likedAt == null) System.currentTimeMillis() else null)
+            },
             modifier = Modifier.weight(1f)
         )
     }
