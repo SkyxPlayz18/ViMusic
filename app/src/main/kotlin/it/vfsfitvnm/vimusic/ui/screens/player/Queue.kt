@@ -495,7 +495,7 @@ fun Queue(
                                     windows.forEachIndexed { i, window ->
                                         val mediaItem = window.mediaItem
 
-                                        Database.instance.insert(mediaItem.asSong())
+                                        Database.instance.upsert(mediaItem.asSong())
                                         Database.instance.insert(
                                             SongPlaylistMap(
                                                 songId = mediaItem.mediaId,
