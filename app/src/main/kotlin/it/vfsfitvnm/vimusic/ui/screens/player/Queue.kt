@@ -499,7 +499,7 @@ fun Queue(
                                             SongPlaylistMap(
                                                 songId = mediaItem.mediaId,
                                                 playlistId = playlistId,
-                                                position = index + i
+                                                position = 0
                                             )
                                         )
                                     }
