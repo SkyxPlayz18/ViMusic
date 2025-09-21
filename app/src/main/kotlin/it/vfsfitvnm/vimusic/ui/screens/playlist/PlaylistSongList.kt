@@ -119,7 +119,7 @@ fun PlaylistSongList(
 
                 mediaItems.forEach { Database.instance.insert(it) }
 
-                val minPos = Database.instance.getMinPosition(playlistId) ?: 0)
+                val minPos = (Database.instance.getMinPosition(playlistId) ?: 0)
 
                 val maps = mediaItems.mapIndexed { index, mediaItem ->
                     SongPlaylistMap(
