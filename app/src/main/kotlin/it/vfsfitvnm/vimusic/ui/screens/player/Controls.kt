@@ -53,6 +53,13 @@ import it.vfsfitvnm.core.ui.utils.px
 import it.vfsfitvnm.core.ui.utils.roundedShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import android.os.Handler
+import android.os.Looper
+import android.os.Bundle
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import it.vfsfitvnm.vimusic.query
+import it.vfsfitvnm.vimusic.models.Song
 
 private val DefaultOffset = 24.dp
 
@@ -137,16 +144,49 @@ private fun ClassicControls(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
-            IconButton(
-                icon = if (likedAt == null) R.drawable.heart_outline else R.drawable.heart,
-                color = colorPalette.favoritesIcon,
-                onClick = {
-                    setLikedAt(if (likedAt == null) System.currentTimeMillis() else null)
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .size(24.dp)
+            // ClassicControls like button (ganti IconButton lama)
+IconButton(
+    icon = if (likedAt == null) R.drawable.heart_outline else R.drawable.heart,
+    color = colorPalette.favoritesIcon,
+    onClick = {
+        query {
+            val newLikedAt = if (likedAt == null) System.currentTimeMillis() else null
+
+            // coba UPDATE dulu; jika rows != 0 berarti sudah ada di DB
+            val rows = Database.instance.like(
+                songId = media.id,
+                likedAt = newLikedAt
             )
+
+            if (rows != 0) {
+                // update UI di main thread tanpa withContext
+                Handler(Looper.getMainLooper()).post { setLikedAt(newLikedAt) }
+                return@query
+            }
+
+            // jika belum ada di DB -> buat MediaItem sederhana dari UiMedia lalu INSERT + toggleLike
+            val mediaItem = MediaItem.Builder()
+                .setMediaId(media.id)
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(media.title)
+                        .setArtist(media.artist)
+                        .setExtras(Bundle().apply {
+                            putBoolean("explicit", media.explicit)
+                        })
+                        .build()
+                )
+                .build()
+
+            Database.instance.insert(mediaItem, Song::toggleLike)
+
+            Handler(Looper.getMainLooper()).post { setLikedAt(newLikedAt) }
+        }
+    },
+    modifier = Modifier
+        .weight(1f)
+        .size(24.dp)
+)
 
             IconButton(
                 icon = R.drawable.play_skip_back,
@@ -227,14 +267,43 @@ private fun ModernControls(
     }
 
     val likeButtonContent: @Composable RowScope.() -> Unit = {
-        BigIconButton(
-            iconId = if (likedAt == null) R.drawable.heart_outline else R.drawable.heart,
-            onClick = {
-                setLikedAt(if (likedAt == null) System.currentTimeMillis() else null)
-            },
-            modifier = Modifier.weight(1f)
-        )
-    }
+        // ModernControls like button (ganti BigIconButton lama)
+BigIconButton(
+    iconId = if (likedAt == null) R.drawable.heart_outline else R.drawable.heart,
+    onClick = {
+        query {
+            val newLikedAt = if (likedAt == null) System.currentTimeMillis() else null
+
+            val rows = Database.instance.like(
+                songId = media.id,
+                likedAt = newLikedAt
+            )
+
+            if (rows != 0) {
+                Handler(Looper.getMainLooper()).post { setLikedAt(newLikedAt) }
+                return@query
+            }
+
+            val mediaItem = MediaItem.Builder()
+                .setMediaId(media.id)
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(media.title)
+                        .setArtist(media.artist)
+                        .setExtras(Bundle().apply {
+                            putBoolean("explicit", media.explicit)
+                        })
+                        .build()
+                )
+                .build()
+
+            Database.instance.insert(mediaItem, Song::toggleLike)
+
+            Handler(Looper.getMainLooper()).post { setLikedAt(newLikedAt) }
+        }
+    },
+    modifier = Modifier.weight(1f)
+)
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
