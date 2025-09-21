@@ -53,6 +53,9 @@ import it.vfsfitvnm.core.ui.utils.px
 import it.vfsfitvnm.core.ui.utils.roundedShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import it.vfsfitvnm.vimusic.query
+import it.vfsfitvnm.vimusic.models.Song
+import it.vfsfitvnm.vimusic.utils.asMediaItem
 
 private val DefaultOffset = 24.dp
 
