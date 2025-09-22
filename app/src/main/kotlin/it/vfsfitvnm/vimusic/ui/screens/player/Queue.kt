@@ -153,15 +153,7 @@ fun Queue(
     lazyListState = lazyListState,
     key = windows,
     onDragEnd = { from, to ->
-        binder.player.moveMediaItem(from, to)
-
-        query {
-            Database.instance.updateSongPositions(
-                playlistId = currentPlaylistId,
-                fromPosition = from,
-                toPosition = to
-            )
-        }
+        binder?.player?.moveMediaItem(from, to)
     }
 )
 
