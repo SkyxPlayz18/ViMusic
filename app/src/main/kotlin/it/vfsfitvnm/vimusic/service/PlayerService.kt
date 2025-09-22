@@ -504,17 +504,29 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
         mediaItemState.update { mediaItem }
 
         mediaItem?.let { newItem ->
-    coroutineScope.launch {
+    coroutineScope.launch(Dispatchers.IO) {
+        // ambil song lama (bisa null)
         val old = Database.instance.getSongById(newItem.mediaId)
-        Database.instance.updateSongMetadata(
+
+        // buat Song yang ter-update, tapi jaga likedAt & totalPlayTime ms dll dari old jika ada
+        val updated = old?.copy(
+            title = newItem.mediaMetadata.title?.toString() ?: "",
+            artistsText = newItem.mediaMetadata.artist?.toString(),
+            durationText = newItem.mediaMetadata.extras?.getString("durationText"),
+            thumbnailUrl = newItem.mediaMetadata.artworkUri?.toString(),
+            album = newItem.mediaMetadata.albumTitle?.toString()
+        ) ?: Song(
             id = newItem.mediaId,
             title = newItem.mediaMetadata.title?.toString() ?: "",
             artistsText = newItem.mediaMetadata.artist?.toString(),
             durationText = newItem.mediaMetadata.extras?.getString("durationText"),
             thumbnailUrl = newItem.mediaMetadata.artworkUri?.toString(),
-            album = newItem.mediaMetadata.albumTitle?.toString(),
-            likedAt = old?.likedAt // 👉 keep favorite status
+            album = newItem.mediaMetadata.albumTitle?.toString()
+            // likedAt, totalPlayTimeMs, loudnessBoost, blacklisted, explicit punya default di data class
         )
+
+        // pakai upsert (kamu bilang upsert(song) ada)
+        Database.instance.upsert(updated)
     }
         }
 
