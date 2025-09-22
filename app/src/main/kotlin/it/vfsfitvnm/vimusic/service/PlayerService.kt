@@ -1251,15 +1251,20 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
     }
 
     private fun likeAction() = mediaItemState.value?.let { mediaItem ->
-        query {
-            runCatching {
-                Database.instance.like(
-                    songId = mediaItem.mediaId,
-                    likedAt = if (isLikedState.value) null else System.currentTimeMillis()
-                )
+    query {
+        runCatching {
+            val updated = Database.instance.like(
+                songId = mediaItem.mediaId,
+                likedAt = if (isLikedState.value) null else System.currentTimeMillis()
+            )
+
+            if (updated == 0) {
+                // fallback: kalau song belum ada di DB, masukin sekalian
+                Database.instance.insert(mediaItem, Song::toggleLike)
             }
-        }
-    }.let { }
+        }.onFailure { it.printStackTrace() }
+    }
+}.let { }
 
     private fun loopAction() {
         PlayerPreferences.trackLoopEnabled = !PlayerPreferences.trackLoopEnabled
