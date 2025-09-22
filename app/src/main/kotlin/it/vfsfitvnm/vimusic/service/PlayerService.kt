@@ -505,14 +505,17 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
 
         mediaItem?.let { newItem ->
     coroutineScope.launch {
-        Database.instance.updateSongMetadata(
-    id = newItem.mediaId,
-    title = newItem.mediaMetadata.title?.toString() ?: "",
-    artistsText = newItem.mediaMetadata.artist?.toString(),
-    durationText = newItem.mediaMetadata.extras?.getString("durationText"),
-    thumbnailUrl = newItem.mediaMetadata.artworkUri?.toString(),
-    album = newItem.mediaMetadata.albumTitle?.toString()
-)
+        // Simpan atau update lagu biar pasti ada di DB
+        Database.instance.upsert(
+            Song(
+                id = newItem.mediaId,
+                title = newItem.mediaMetadata.title?.toString() ?: "",
+                artistsText = newItem.mediaMetadata.artist?.toString(),
+                durationText = newItem.mediaMetadata.extras?.getString("durationText"),
+                thumbnailUrl = newItem.mediaMetadata.artworkUri?.toString(),
+                album = newItem.mediaMetadata.albumTitle?.toString()
+            )
+        )
     }
         }
 
