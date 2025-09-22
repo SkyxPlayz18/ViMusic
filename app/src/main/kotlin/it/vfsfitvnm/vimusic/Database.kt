@@ -361,7 +361,7 @@ interface Database {
         }
     }
 
-    @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY SongPlaylistMap.position ASC")
+    @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY SongPlaylistMap.position DESC")
     fun _playlistSongsByPositionAsc(id: Long): Flow<List<Song>?>
 
     @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY SongPlaylistMap.position DESC")
