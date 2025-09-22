@@ -404,6 +404,22 @@ interface Database {
     )
     fun playlistPreviewsByNameAsc(): Flow<List<PlaylistPreview>>
 
+    @Query("""
+    UPDATE SongPlaylistMap SET position =
+      CASE
+        WHEN position = :fromPosition THEN :toPosition
+        WHEN :fromPosition < :toPosition AND position > :fromPosition AND position <= :toPosition THEN position - 1
+        WHEN :fromPosition > :toPosition AND position < :fromPosition AND position >= :toPosition THEN position + 1
+        ELSE position
+      END
+    WHERE playlistId = :playlistId
+""")
+fun updateSongPositions(
+    playlistId: Long,
+    fromPosition: Int,
+    toPosition: Int
+)
+
     @Transaction
     @Query(
         """
