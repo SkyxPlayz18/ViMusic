@@ -258,6 +258,7 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
     private var isNotificationStarted = false
     override val notificationId get() = ServiceNotifications.default.notificationId!!
     private val notificationActionReceiver = NotificationActionReceiver()
+    var isDraggingQueue: Boolean = false
 
     private val mediaItemState = MutableStateFlow<MediaItem?>(null)
     private val isLikedState = mediaItemState
@@ -546,9 +547,13 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
     }
 
     override fun onTimelineChanged(timeline: Timeline, reason: Int) {
-        if (reason != Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) return
+    if (reason != Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) return
+
+    // ⚡ Jangan update queue kalau lagi drag
+    if (!isDraggingQueue) {
         updateMediaSessionQueue(timeline)
         maybeSavePlayerQueue()
+    }
     }
 
     override fun onPlayerError(error: PlaybackException) {
