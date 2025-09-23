@@ -202,24 +202,15 @@ val reorderingState = rememberReorderingState(
         suggestions = null
     }
 
-    binder.player.DisposableListener {
-        object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 mediaItemIndex =
                     if (binder.player.mediaItemCount == 0) -1 else binder.player.currentMediaItemIndex
             }
 
-            binder.player.DisposableListener {
-    object : Player.Listener {
-        override fun onTimelineChanged(timeline: Timeline, reason: Int) {
-            // 🚫 skip update kalau lagi drag
-            if (isDraggingQueue) return
-
-            windows = timeline.windows
-            mediaItemIndex = if (binder.player.mediaItemCount == 0) -1
-                else binder.player.currentMediaItemIndex
-        }
-    }
+            override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+    windows = timeline.windows
+    mediaItemIndex =
+        if (binder.player.mediaItemCount == 0) -1 else binder.player.currentMediaItemIndex
             }
 
             
@@ -290,14 +281,11 @@ val reorderingState = rememberReorderingState(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.nestedScroll(scrollConnection)
                     ) {
-                        // 4) itemsIndexed — beri tipe eksplisit pada lambda untuk menghindari inference errors
-itemsIndexed(
+                        itemsIndexed(
     items = windows,
-    key = { _: Int, window: Timeline.Window -> window.mediaItem.mediaId },
-    contentType = { _: Int, _: Timeline.Window -> ContentType.Window }
+    key = { _, window -> window.mediaItem.mediaId }, // ✅ stabil & unik
+    contentType = { _, _ -> ContentType.Window }
 ) { i, window ->
-    // ...
-}
                             val isPlayingThisMediaItem = mediaItemIndex == window.firstPeriodIndex
 
                             SongItem(
