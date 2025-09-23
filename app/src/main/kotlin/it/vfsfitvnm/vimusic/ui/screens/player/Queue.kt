@@ -157,11 +157,11 @@ val reorderingState = rememberReorderingState(
     lazyListState = lazyListState,
     key = windows, // ✅ pakai list sebagai remember key
     onDragEnd = { from, to ->
-    windows = windows.toMutableList().apply {
-        add(to, removeAt(from))
+        // from/to adalah index relatif pada 'windows'
+        binder.player.moveMediaItem(from, to)
     }
-    binder.player.moveMediaItem(from, to)
-    }
+)
+
 
     val visibleSuggestions by remember {
         derivedStateOf {
