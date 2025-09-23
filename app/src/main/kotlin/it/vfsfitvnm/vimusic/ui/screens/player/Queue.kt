@@ -193,6 +193,8 @@ val reorderingState = rememberReorderingState(
         suggestions = null
     }
 
+            binder.player.DisposableListener {
+        object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 mediaItemIndex =
                     if (binder.player.mediaItemCount == 0) -1 else binder.player.currentMediaItemIndex
