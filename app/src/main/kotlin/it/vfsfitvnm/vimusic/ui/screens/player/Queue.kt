@@ -274,7 +274,7 @@ fun Queue(
                     ) {
                         itemsIndexed(
                             items = windows,
-                            key = { _, window -> window.uid.hashCode() },
+                            key = { _, window -> window.mediaItem.mediaId },
                             contentType = { _, _ -> ContentType.Window }
                         ) { i, window ->
                             val isPlayingThisMediaItem = mediaItemIndex == window.firstPeriodIndex
