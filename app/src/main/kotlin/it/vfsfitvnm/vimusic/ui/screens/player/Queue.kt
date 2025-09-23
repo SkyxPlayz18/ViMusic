@@ -151,8 +151,15 @@ fun Queue(
     val lazyListState = rememberLazyListState()
     val reorderingState = rememberReorderingState(
     lazyListState = lazyListState,
-    key = windows.map { it.uid.hashCode() }, // 👈 konsisten
-    onDragEnd = binder.player::moveMediaItem
+    key = { window -> window.uid.hashCode() },
+    onMove = { from, to ->
+        windows = windows.toMutableList().apply {
+            add(to, removeAt(from)) // update urutan lokal
+        }
+    },
+    onDragEnd = { from, to ->
+        binder.player.moveMediaItem(from, to) // sinkron ke player
+    }
 )
 
     val visibleSuggestions by remember {
