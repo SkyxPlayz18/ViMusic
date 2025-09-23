@@ -151,8 +151,8 @@ fun Queue(
     val lazyListState = rememberLazyListState()
     val reorderingState = rememberReorderingState(
     lazyListState = lazyListState,
-    key = { window -> window.mediaItem.mediaId }, // ✅ stabil & unik
-    onDragEnd = binder.player::moveMediaItem     // ✅ ini doang
+    key = windows, // ✅ gunakan collection yang sama dengan itemsIndexed
+    onDragEnd = binder.player::moveMediaItem
 )
 
     val visibleSuggestions by remember {
