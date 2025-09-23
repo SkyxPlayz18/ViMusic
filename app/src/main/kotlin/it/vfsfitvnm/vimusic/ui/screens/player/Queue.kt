@@ -202,9 +202,11 @@ fun Queue(
             }
 
             override fun onTimelineChanged(timeline: Timeline, reason: Int) {
-                windows = timeline.windows
-                mediaItemIndex =
-                    if (binder.player.mediaItemCount == 0) -1 else binder.player.currentMediaItemIndex
+    if (!reorderingState.isDragging) {
+        windows = timeline.windows
+    }
+    mediaItemIndex =
+        if (binder.player.mediaItemCount == 0) -1 else binder.player.currentMediaItemIndex
             }
 
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
