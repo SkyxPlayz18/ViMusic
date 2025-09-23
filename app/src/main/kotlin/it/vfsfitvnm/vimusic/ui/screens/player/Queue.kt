@@ -151,13 +151,11 @@ fun Queue(
     val lazyListState = rememberLazyListState()
     val reorderingState = rememberReorderingState(
     lazyListState = lazyListState,
-    key = windows,
-    onDragStart = {
-        binder.service?.isDraggingQueue = true   // 🚩 lagi drag
-    },
+    key = { window -> window.mediaItem.mediaId },
+    onDragStart = { binder.playerService?.isDraggingQueue = true },
     onDragEnd = { from, to ->
+        binder.playerService?.isDraggingQueue = false
         binder.player.moveMediaItem(from, to)
-        binder.service?.isDraggingQueue = false  // 🚩 drag selesai
     }
 )
 
