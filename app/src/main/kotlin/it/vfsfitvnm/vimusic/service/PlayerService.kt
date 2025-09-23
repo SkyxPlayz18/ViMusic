@@ -550,7 +550,6 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
     if (reason != Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) return
 
     // ❌ jangan ganti windows setiap kali drag selesai
-    windows = timeline.windows  
 
     updateMediaSessionQueue(timeline)
     maybeSavePlayerQueue()
