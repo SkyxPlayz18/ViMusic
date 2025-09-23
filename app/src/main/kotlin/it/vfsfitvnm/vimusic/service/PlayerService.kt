@@ -547,8 +547,10 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
     }
 
     override fun onTimelineChanged(timeline: Timeline, reason: Int) {
-    if (isDraggingQueue) return  // 🚩 skip update pas lagi drag
     if (reason != Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) return
+
+    // ❌ jangan ganti windows setiap kali drag selesai
+    windows = timeline.windows  
 
     updateMediaSessionQueue(timeline)
     maybeSavePlayerQueue()
