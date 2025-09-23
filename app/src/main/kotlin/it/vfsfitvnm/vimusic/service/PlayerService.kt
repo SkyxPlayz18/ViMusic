@@ -547,13 +547,11 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
     }
 
     override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+    if (isDraggingQueue) return  // 🚩 skip update pas lagi drag
     if (reason != Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) return
 
-    // ⚡ Jangan update queue kalau lagi drag
-    if (!isDraggingQueue) {
-        updateMediaSessionQueue(timeline)
-        maybeSavePlayerQueue()
-    }
+    updateMediaSessionQueue(timeline)
+    maybeSavePlayerQueue()
     }
 
     override fun onPlayerError(error: PlaybackException) {
