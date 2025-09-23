@@ -150,17 +150,26 @@ fun Queue(
 
     
     val lazyListState = rememberLazyListState()
-    var isDraggingQueue by remember { mutableStateOf(false) }
+// Queue.kt
+var isDraggingQueue by remember { mutableStateOf(false) }
 
 val reorderingState = rememberReorderingState(
     lazyListState = lazyListState,
-    key = { window: Timeline.Window -> window.mediaItem.mediaId },
+    key = windows.toList(),
     onDragStart = { isDraggingQueue = true },
     onDragEnd = { from, to ->
-        isDraggingQueue = false
         binder.player.moveMediaItem(from, to)
+
+        // update windows lokal → UI gak acak
+        windows = windows.toMutableList().apply {
+            val moved = removeAt(from)
+            add(to, moved)
+        }.toTypedArray()
+
+        isDraggingQueue = false
     }
 )
+
 
     val visibleSuggestions by remember {
         derivedStateOf {
@@ -200,13 +209,20 @@ val reorderingState = rememberReorderingState(
                     if (binder.player.mediaItemCount == 0) -1 else binder.player.currentMediaItemIndex
             }
 
-            override fun onTimelineChanged(timeline: Timeline, reason: Int) {
-    if (!reorderingState.isDragging) {
-        windows = timeline.windows
+            binder.player.DisposableListener {
+    object : Player.Listener {
+        override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+            // 🚫 skip update kalau lagi drag
+            if (isDraggingQueue) return
+
+            windows = timeline.windows
+            mediaItemIndex = if (binder.player.mediaItemCount == 0) -1
+                else binder.player.currentMediaItemIndex
+        }
     }
-    mediaItemIndex =
-        if (binder.player.mediaItemCount == 0) -1 else binder.player.currentMediaItemIndex
             }
+
+            
 
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 shouldBePlaying = binder.player.shouldBePlaying
@@ -274,11 +290,14 @@ val reorderingState = rememberReorderingState(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.nestedScroll(scrollConnection)
                     ) {
-                        itemsIndexed(
-                            items = windows,
-                            key = { window: Timeline.Window -> window.mediaItem.mediaId },
-                            contentType = { _, _ -> ContentType.Window }
-                        ) { i, window ->
+                        // 4) itemsIndexed — beri tipe eksplisit pada lambda untuk menghindari inference errors
+itemsIndexed(
+    items = windows,
+    key = { _: Int, window: Timeline.Window -> window.mediaItem.mediaId },
+    contentType = { _: Int, _: Timeline.Window -> ContentType.Window }
+) { i, window ->
+    // ...
+}
                             val isPlayingThisMediaItem = mediaItemIndex == window.firstPeriodIndex
 
                             SongItem(
