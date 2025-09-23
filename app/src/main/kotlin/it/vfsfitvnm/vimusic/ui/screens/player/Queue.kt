@@ -155,10 +155,10 @@ var isDraggingQueue by remember { mutableStateOf(false) }
 
 val reorderingState = rememberReorderingState(
     lazyListState = lazyListState,
-    key = windows, // ✅ pakai list sebagai remember key
-    onDragEnd = { from, to ->
-        // from/to adalah index relatif pada 'windows'
-        binder.player.moveMediaItem(from, to)
+    key = windows,
+    onDragEnd = { fromIndex, toIndex ->
+        binder.player.moveMediaItem(fromIndex, toIndex)
+        // ❌ jangan update database di sini
     }
 )
 
