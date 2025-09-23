@@ -155,21 +155,12 @@ var isDraggingQueue by remember { mutableStateOf(false) }
 
 val reorderingState = rememberReorderingState(
     lazyListState = lazyListState,
-    key = windows.toList(),
-    onDragStart = { isDraggingQueue = true },
+    key = windows, // ✅ pakai list sebagai remember key
     onDragEnd = { from, to ->
+        // from/to adalah index relatif pada 'windows'
         binder.player.moveMediaItem(from, to)
-
-        // update windows lokal → UI gak acak
-        windows = windows.toMutableList().apply {
-            val moved = removeAt(from)
-            add(to, moved)
-        }.toTypedArray()
-
-        isDraggingQueue = false
     }
 )
-
 
     val visibleSuggestions by remember {
         derivedStateOf {
