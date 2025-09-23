@@ -148,13 +148,16 @@ fun Queue(
     var windows by remember { mutableStateOf(binder.player.currentTimeline.windows) }
     var shouldBePlaying by remember { mutableStateOf(binder.player.shouldBePlaying) }
 
+    
     val lazyListState = rememberLazyListState()
-    val reorderingState = rememberReorderingState(
+    var isDraggingQueue by remember { mutableStateOf(false) }
+
+val reorderingState = rememberReorderingState(
     lazyListState = lazyListState,
-    key = { window -> window.mediaItem.mediaId },
-    onDragStart = { binder.playerService?.isDraggingQueue = true },
+    key = { window: Timeline.Window -> window.mediaItem.mediaId },
+    onDragStart = { isDraggingQueue = true },
     onDragEnd = { from, to ->
-        binder.playerService?.isDraggingQueue = false
+        isDraggingQueue = false
         binder.player.moveMediaItem(from, to)
     }
 )
@@ -273,7 +276,7 @@ fun Queue(
                     ) {
                         itemsIndexed(
                             items = windows,
-                            key = { _, window -> window.mediaItem.mediaId },
+                            key = { window: Timeline.Window -> window.mediaItem.mediaId },
                             contentType = { _, _ -> ContentType.Window }
                         ) { i, window ->
                             val isPlayingThisMediaItem = mediaItemIndex == window.firstPeriodIndex
