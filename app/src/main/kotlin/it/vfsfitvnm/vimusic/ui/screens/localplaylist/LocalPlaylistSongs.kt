@@ -173,15 +173,15 @@ fun LocalPlaylistSongs(
     }
 
     val reorderingState = rememberReorderingState(
-        lazyListState = lazyListState,
-        key = songs,
-        onDragEnd = { fromIndex, toIndex ->
-            transaction {
-                Database.instance.move(playlist.id, fromIndex, toIndex)
-            }
-        },
-        extraItemCount = 1
-    )
+    lazyListState = lazyListState,
+    key = songs,
+    onDragEnd = { fromIndex, toIndex ->
+        transaction {
+            Database.instance.move(playlist.id, fromIndex, toIndex)
+        }
+    },
+    extraItemCount = 1
+)
 
     var isRenaming by rememberSaveable { mutableStateOf(false) }
 
