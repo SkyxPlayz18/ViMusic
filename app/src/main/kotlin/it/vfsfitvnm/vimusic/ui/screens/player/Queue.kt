@@ -151,15 +151,13 @@ fun Queue(
     val lazyListState = rememberLazyListState()
     val reorderingState = rememberReorderingState(
     lazyListState = lazyListState,
-    key = windows, // biar state recompose kalau windows berubah
+    key = windows,
+    onDragStart = {
+        binder.service?.isDraggingQueue = true   // 🚩 lagi drag
+    },
     onDragEnd = { from, to ->
-        // 1. Update queue di ExoPlayer
         binder.player.moveMediaItem(from, to)
-
-        // 2. Update list lokal "windows"
-        windows = windows.toMutableList().apply {
-            add(to, removeAt(from))
-        }
+        binder.service?.isDraggingQueue = false  // 🚩 drag selesai
     }
 )
 
