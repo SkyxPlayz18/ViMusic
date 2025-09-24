@@ -202,12 +202,9 @@ val reorderingState = rememberReorderingState(
             }
 
             override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+    if (isDraggingQueue) return // skip update pas drag
     windows = timeline.windows
-    mediaItemIndex =
-        if (binder.player.mediaItemCount == 0) -1 else binder.player.currentMediaItemIndex
             }
-
-            
 
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 shouldBePlaying = binder.player.shouldBePlaying
