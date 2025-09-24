@@ -490,29 +490,28 @@ val reorderingState = rememberReorderingState(
                         modifier = Modifier
                             .clip(16.dp.roundedShape)
                             .clickable {
-                                // ganti fungsi addToPlaylist yang sekarang dengan yang ini
-fun addToPlaylist(playlist: Playlist, index: Int) = transaction {
+                                fun addToPlaylist(playlist: Playlist, index: Int) = transaction {
     val playlistId = Database.instance
         .insert(playlist)
         .takeIf { it != -1L } ?: playlist.id
 
-    // ambil posisi terkecil yang ada di playlist (jika kosong => 0)
-    val minPosition = Database.instance.getMinPosition(playlistId) ?: 0
+    // cari posisi terbesar yang ada di playlist
+    val maxPosition = Database.instance.getMaxPosition(playlistId) ?: -1
 
-    // insert setiap item dari queue (windows) sehingga item baru berada di ATAS
+    // setiap lagu baru ditaruh setelah posisi terakhir (jadi ASC di DB)
     windows.forEachIndexed { i, window ->
         val mediaItem = window.mediaItem
 
-        Database.instance.upsert(mediaItem.asSong()) // pastikan asSong/upsert ada
+        Database.instance.upsert(mediaItem.asSong())
         Database.instance.insert(
             SongPlaylistMap(
                 songId = mediaItem.mediaId,
                 playlistId = playlistId,
-                position = minPosition - (i + 1) // i=0 => minPosition-1 (paling atas)
+                position = maxPosition + (i + 1) // nambah terus, ASC
             )
         )
     }
-}
+                                }
     
                                 menuState.display {
                                     var isCreatingNewPlaylist by rememberSaveable {
