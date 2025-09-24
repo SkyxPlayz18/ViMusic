@@ -364,29 +364,29 @@ suspend fun getSongById(id: String): Song?
         }
     }
 
-    @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY SongPlaylistMap.position ASC")
-    fun _playlistSongsByPositionAsc(id: Long): Flow<List<Song>?>
-
     @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY SongPlaylistMap.position DESC")
     fun _playlistSongsByPositionDesc(id: Long): Flow<List<Song>?>
 
-    @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY SongPlaylistMap.ROWID ASC")
-    fun _playlistSongsByDateAddedAsc(id: Long): Flow<List<Song>?>
+    @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY SongPlaylistMap.position ASC")
+    fun _playlistSongsByPositionAsc(id: Long): Flow<List<Song>?>
 
     @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY SongPlaylistMap.ROWID DESC")
     fun _playlistSongsByDateAddedDesc(id: Long): Flow<List<Song>?>
 
-    @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY Song.title COLLATE NOCASE ASC")
-    fun _playlistSongsByTitleAsc(id: Long): Flow<List<Song>?>
+    @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY SongPlaylistMap.ROWID ASC")
+    fun _playlistSongsByDateAddedAsc(id: Long): Flow<List<Song>?>
 
     @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY Song.title COLLATE NOCASE DESC")
     fun _playlistSongsByTitleDesc(id: Long): Flow<List<Song>?>
 
-    @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY Song.totalPlayTimeMs ASC")
-    fun _playlistSongsByPlayTimeAsc(id: Long): Flow<List<Song>?>
+    @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY Song.title COLLATE NOCASE ASC")
+    fun _playlistSongsByTitleAsc(id: Long): Flow<List<Song>?>
 
     @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY Song.totalPlayTimeMs DESC")
     fun _playlistSongsByPlayTimeDesc(id: Long): Flow<List<Song>?>
+
+    @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY Song.totalPlayTimeMs ASC")
+    fun _playlistSongsByPlayTimeAsc(id: Long): Flow<List<Song>?>
 
     @Transaction
     @Query("SELECT * FROM Playlist WHERE id = :id")
