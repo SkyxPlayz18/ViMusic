@@ -395,6 +395,9 @@ suspend fun getSongById(id: String): Song?
     @Query("SELECT MIN(position) FROM SongPlaylistMap WHERE playlistId = :playlistId")
     fun getMinPosition(playlistId: Long): Int?
 
+    @Query("SELECT MAX(position) FROM SongPlaylistMap WHERE playlistId = :playlistId")
+fun getMaxPosition(playlistId: Long): Int?
+
     @Transaction
     @Query(
         """
