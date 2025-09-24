@@ -154,10 +154,13 @@ fun Queue(
 var isDraggingQueue by remember { mutableStateOf(false) }
 
 val reorderingState = rememberReorderingState(
+        lazyListState = lazyListState,
+        key = windows,
+        onDragEnd = binder.player::moveMediaItem
     LaunchedEffect(reorderingState.isDragging) {
     binder.isDraggingQueue = reorderingState.isDragging
     }
-)
+    )
     val visibleSuggestions by remember {
         derivedStateOf {
             suggestions
@@ -490,13 +493,24 @@ val reorderingState = rememberReorderingState(
                         modifier = Modifier
                             .clip(16.dp.roundedShape)
                             .clickable {
-                                query {
-    Database.instance.addMediaItemsToPlaylistAtTop(
-        playlist = Playlist(name = text),
-        mediaItems = windows.map { it.mediaItem }
-    )
+                                fun addToPlaylist(playlist: Playlist, index: Int) = transaction {
+                                    val playlistId = Database.instance
+                                        .insert(playlist)
+                                        .takeIf { it != -1L } ?: playlist.id
+
+                                    windows.forEachIndexed { i, window ->
+                                        val mediaItem = window.mediaItem
+
+                                        Database.instance.insert(mediaItem)
+                                        Database.instance.insert(
+                                            SongPlaylistMap(
+                                                songId = mediaItem.mediaId,
+                                                playlistId = playlistId,
+                                                position = index + i
+                                            )
+                                        )
+                                    }
                                 }
-                            }
     
                                 menuState.display {
                                     var isCreatingNewPlaylist by rememberSaveable {
