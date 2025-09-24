@@ -198,8 +198,9 @@ val reorderingState = rememberReorderingState(
             }
 
             override fun onTimelineChanged(timeline: Timeline, reason: Int) {
-    if (isDraggingQueue) return // skip update pas drag
-    windows = timeline.windows
+                windows = timeline.windows
+                mediaItemIndex =
+                    if (binder.player.mediaItemCount == 0) -1 else binder.player.currentMediaItemIndex
             }
 
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
@@ -491,26 +492,22 @@ val reorderingState = rememberReorderingState(
                             .clip(16.dp.roundedShape)
                             .clickable {
                                 fun addToPlaylist(playlist: Playlist, index: Int) = transaction {
-    val playlistId = Database.instance
-        .insert(playlist)
-        .takeIf { it != -1L } ?: playlist.id
+                                    val playlistId = Database.instance
+                                        .insert(playlist)
+                                        .takeIf { it != -1L } ?: playlist.id
 
-    // cari posisi terbesar yang ada di playlist
-    val maxPosition = Database.instance.getMaxPosition(playlistId) ?: -1
+                                    windows.forEachIndexed { i, window ->
+                                        val mediaItem = window.mediaItem
 
-    // setiap lagu baru ditaruh setelah posisi terakhir (jadi ASC di DB)
-    windows.forEachIndexed { i, window ->
-        val mediaItem = window.mediaItem
-
-        Database.instance.upsert(mediaItem.asSong())
-        Database.instance.insert(
-            SongPlaylistMap(
-                songId = mediaItem.mediaId,
-                playlistId = playlistId,
-                position = maxPosition + (i + 1) // nambah terus, ASC
-            )
-        )
-    }
+                                        Database.instance.insert(mediaItem)
+                                        Database.instance.insert(
+                                            SongPlaylistMap(
+                                                songId = mediaItem.mediaId,
+                                                playlistId = playlistId,
+                                                position = index + i
+                                            )
+                                        )
+                                    }
                                 }
     
                                 menuState.display {
