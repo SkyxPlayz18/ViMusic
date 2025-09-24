@@ -653,10 +653,6 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
         }
     }
 
-    var isDraggingQueue: Boolean
-    get() = this@PlayerService.isDraggingQueue
-    set(value) { this@PlayerService.isDraggingQueue = value }
-
     private fun maybeRestorePlayerQueue() {
         if (!PlayerPreferences.persistentQueue) return
 
@@ -1160,6 +1156,10 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
             }
 
         val poiTimestamp get() = this@PlayerService.poiTimestamp
+
+        var isDraggingQueue: Boolean
+    get() = this@PlayerService.isDraggingQueue
+    set(value) { this@PlayerService.isDraggingQueue = value }
 
         fun setBitmapListener(listener: ((Bitmap?) -> Unit)?) = bitmapProvider.setListener(listener)
 
