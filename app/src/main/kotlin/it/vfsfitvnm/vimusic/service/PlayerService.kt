@@ -258,6 +258,7 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
     private var isNotificationStarted = false
     override val notificationId get() = ServiceNotifications.default.notificationId!!
     private val notificationActionReceiver = NotificationActionReceiver()
+    private var isDraggingQueue: Boolean = false
     var isDraggingQueue: Boolean
     get() = this@PlayerService.isDraggingQueue
     set(value) { this@PlayerService.isDraggingQueue = value }
