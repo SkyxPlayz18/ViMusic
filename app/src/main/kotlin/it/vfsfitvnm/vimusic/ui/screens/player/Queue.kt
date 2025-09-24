@@ -156,10 +156,7 @@ var isDraggingQueue by remember { mutableStateOf(false) }
 val reorderingState = rememberReorderingState(
     lazyListState = lazyListState,
     key = windows,
-    onDragEnd = { fromIndex, toIndex ->
-        binder.player.moveMediaItem(fromIndex, toIndex)
-        // ❌ jangan update DB
-    }
+    onDragEnd = binder.player::moveMediaItem
 )
 
     val visibleSuggestions by remember {
@@ -493,23 +490,26 @@ val reorderingState = rememberReorderingState(
                         modifier = Modifier
                             .clip(16.dp.roundedShape)
                             .clickable {
-                                fun addToPlaylist(playlist: Playlist, index: Int) = transaction {
-                                    val playlistId = Database.instance
-                                        .insert(playlist)
-                                        .takeIf { it != -1L } ?: playlist.id
+                                fun addToPlaylist(playlist: Playlist, windows: List<Timeline.Window>) = transaction {
+    val playlistId = Database.instance
+        .insert(playlist)
+        .takeIf { it != -1L } ?: playlist.id
 
-                                    windows.forEachIndexed { i, window ->
-                                        val mediaItem = window.mediaItem
+    // cari posisi terkecil di playlist (default 0 kalau kosong)
+    val minPosition = Database.instance.getMinPosition(playlistId) ?: 0
 
-                                        Database.instance.upsert(mediaItem.asSong())
-                                        Database.instance.insert(
-                                            SongPlaylistMap(
-                                                songId = mediaItem.mediaId,
-                                                playlistId = playlistId,
-                                                position = -i
-                                            )
-                                        )
-                                    }
+    windows.forEachIndexed { i, window ->
+        val mediaItem = window.mediaItem
+
+        Database.instance.upsert(mediaItem.asSong())
+        Database.instance.insert(
+            SongPlaylistMap(
+                songId = mediaItem.mediaId,
+                playlistId = playlistId,
+                position = minPosition - (i + 1) // tambah ke atas
+            )
+        )
+    }
                                 }
 
                                 menuState.display {
