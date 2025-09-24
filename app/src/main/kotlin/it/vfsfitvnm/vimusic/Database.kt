@@ -364,7 +364,7 @@ suspend fun getSongById(id: String): Song?
         }
     }
 
-    @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY SongPlaylistMap.position DESC")
+    @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY SongPlaylistMap.position ASC")
     fun _playlistSongsByPositionAsc(id: Long): Flow<List<Song>?>
 
     @Transaction @Query("SELECT Song.* FROM SongPlaylistMap INNER JOIN Song on Song.id = SongPlaylistMap.songId WHERE playlistId = :id ORDER BY SongPlaylistMap.position DESC")
