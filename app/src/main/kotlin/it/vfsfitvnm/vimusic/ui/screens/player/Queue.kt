@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -116,6 +117,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.flow.collect
+
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -154,13 +157,16 @@ fun Queue(
 var isDraggingQueue by remember { mutableStateOf(false) }
 
 val reorderingState = rememberReorderingState(
-        lazyListState = lazyListState,
-        key = windows,
-        onDragEnd = binder.player::moveMediaItem
-    LaunchedEffect(reorderingState.isDragging) {
-    binder.isDraggingQueue = reorderingState.isDragging
+    lazyListState = lazyListState,
+    key = windows,
+    onDragEnd = { fromIndex, toIndex ->
+        binder.player.moveMediaItem(fromIndex, toIndex)
+        // jangan ubah DB di sini
     }
-    )
+)
+LaunchedEffect(reorderingState.isDragging) {
+    binder.isDraggingQueue = reorderingState.isDragging
+}
     val visibleSuggestions by remember {
         derivedStateOf {
             suggestions
