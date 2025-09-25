@@ -529,8 +529,6 @@ LaunchedEffect(reorderingState.isDragging) {
                                         onAccept = { text ->
                                             menuState.hide()
                                             addToPlaylist(Playlist(name = text), 0)
-    )
-                                            }
                                         }
                                     )
 
@@ -581,18 +579,15 @@ LaunchedEffect(reorderingState.isDragging) {
                                                 onClick = {
                                                     menuState.hide()
                                                     addToPlaylist(
-    playlistPreview.playlist,
-    playlistPreview.songCount
-)
-    )
-                                                    }
+                                                        playlistPreview.playlist,
+                                                        playlistPreview.songCount
                                                     )
                                                 }
                                             )
                                         }
                                     }
                                 }
-                            }
+                        }
                             .background(colorPalette.background1)
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                     )
