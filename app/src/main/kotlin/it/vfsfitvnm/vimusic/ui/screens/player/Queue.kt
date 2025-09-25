@@ -506,7 +506,7 @@ LaunchedEffect(reorderingState.isDragging) {
     )
                             }
                                 }
-    
+                            
                                 menuState.display {
                                     var isCreatingNewPlaylist by rememberSaveable {
                                         mutableStateOf(
@@ -587,7 +587,7 @@ LaunchedEffect(reorderingState.isDragging) {
                                         }
                                     }
                                 }
-                        }
+                            )
                             .background(colorPalette.background1)
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                     )
