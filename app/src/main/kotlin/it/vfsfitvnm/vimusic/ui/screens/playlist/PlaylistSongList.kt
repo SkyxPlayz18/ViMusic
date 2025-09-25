@@ -104,6 +104,7 @@ fun PlaylistSongList(
     onDismiss = { isImportingPlaylist = false },
     onAccept = { text ->
         query {
+            transaction {
     Database.instance.addMediaItemsToPlaylistAtTop(
         playlist = Playlist(
             name = text,
@@ -114,6 +115,7 @@ fun PlaylistSongList(
             ?.map(Innertube.SongItem::asMediaItem)
             .orEmpty()
     )
+        }
         }
 
     val headerContent: @Composable () -> Unit = {
