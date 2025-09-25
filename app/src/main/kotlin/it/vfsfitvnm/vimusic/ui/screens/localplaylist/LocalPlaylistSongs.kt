@@ -151,7 +151,7 @@ fun LocalPlaylistSongs(
 
     // Add state for sorting
     var sortBy by rememberSaveable(stateSaver = enumSaver()) { mutableStateOf(SongSortBy.Position) }
-var sortOrder by rememberSaveable(stateSaver = enumSaver()) { mutableStateOf(SortOrder.Descending) }
+var sortOrder by rememberSaveable(stateSaver = enumSaver()) { mutableStateOf(SortOrder.Ascending) }
 
     var loading by remember { mutableStateOf(false) }
 
