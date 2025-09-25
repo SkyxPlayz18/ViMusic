@@ -182,7 +182,9 @@ var sortOrder by rememberSaveable(stateSaver = enumSaver()) { mutableStateOf(Sor
     },
     extraItemCount = 1
 )
-
+LaunchedEffect(reorderingState.isDragging) {
+    binder.isDraggingQueue = reorderingState.isDragging
+}
     var isRenaming by rememberSaveable { mutableStateOf(false) }
 
     if (isRenaming) TextFieldDialog(
