@@ -117,6 +117,7 @@ fun PlaylistSongList(
     )
         }
         }
+    }
 
     val headerContent: @Composable () -> Unit = {
         if (playlistPage == null) HeaderPlaceholder(modifier = Modifier.shimmer())
