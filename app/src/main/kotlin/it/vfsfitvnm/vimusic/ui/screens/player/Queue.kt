@@ -499,23 +499,11 @@ LaunchedEffect(reorderingState.isDragging) {
                         modifier = Modifier
                             .clip(16.dp.roundedShape)
                             .clickable {
-                                fun addToPlaylist(playlist: Playlist, index: Int) = transaction {
-                                    val playlistId = Database.instance
-                                        .insert(playlist)
-                                        .takeIf { it != -1L } ?: playlist.id
-
-                                    windows.forEachIndexed { i, window ->
-                                        val mediaItem = window.mediaItem
-
-                                        Database.instance.insert(mediaItem)
-                                        Database.instance.insert(
-                                            SongPlaylistMap(
-                                                songId = mediaItem.mediaId,
-                                                playlistId = playlistId,
-                                                position = index + i
-                                            )
-                                        )
-                                    }
+                                fun addToPlaylist query {
+    Database.instance.addMediaItemsToPlaylistAtTop(
+        playlist = Playlist(name = text),
+        mediaItems = windows.map { it.mediaItem }
+    )
                                 }
     
                                 menuState.display {
