@@ -96,27 +96,26 @@ fun PlaylistSongList(
     }
 
     var isImportingPlaylist by rememberSaveable { mutableStateOf(false) }
-
     if (isImportingPlaylist) {
     TextFieldDialog(
-    hintText = stringResource(R.string.enter_playlist_name_prompt),
-    initialTextInput = playlistPage?.title.orEmpty(),
-    onDismiss = { isImportingPlaylist = false },
-    onAccept = { text ->
-        query {
-            transaction {
-    Database.instance.addMediaItemsToPlaylistAtTop(
-        playlist = Playlist(
-            name = text,
-            browseId = browseId,
-            thumbnail = playlistPage?.thumbnail?.url
-        ),
-        mediaItems = playlistPage?.songsPage?.items
-            ?.map(Innertube.SongItem::asMediaItem)
-            .orEmpty()
+        hintText = stringResource(R.string.enter_playlist_name_prompt),
+        initialTextInput = playlistPage?.title.orEmpty(),
+        onDismiss = { isImportingPlaylist = false },
+        onAccept = { text ->
+            query {
+                Database.instance.addMediaItemsToPlaylistAtTop(
+                    playlist = Playlist(
+                        name = text,
+                        browseId = browseId,
+                        thumbnail = playlistPage?.thumbnail?.url
+                    ),
+                    mediaItems = playlistPage?.songsPage?.items
+                        ?.map(Innertube.SongItem::asMediaItem)
+                        .orEmpty()
+                )
+            }
+        }
     )
-        }
-        }
     }
 
     val headerContent: @Composable () -> Unit = {
