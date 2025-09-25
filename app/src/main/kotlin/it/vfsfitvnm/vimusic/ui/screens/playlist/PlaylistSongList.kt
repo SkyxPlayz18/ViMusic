@@ -104,6 +104,7 @@ fun PlaylistSongList(
     onDismiss = { isImportingPlaylist = false },
     onAccept = { text ->
         query {
+            transaction {
     Database.instance.addMediaItemsToPlaylistAtTop(
         playlist = Playlist(
             name = text,
