@@ -156,8 +156,14 @@ var isDraggingQueue by remember { mutableStateOf(false) }
 val reorderingState = rememberReorderingState(
     lazyListState = lazyListState,
     key = windows,
-    onDragEnd = binder.player::moveMediaItem
+    onDragEnd = { fromIndex, toIndex ->
+        binder.player.moveMediaItem(fromIndex, toIndex)
+        // jangan ubah DB di sini
+    }
 )
+LaunchedEffect(reorderingState.isDragging) {
+    binder.isDraggingQueue = reorderingState.isDragging
+}
 
     val visibleSuggestions by remember {
         derivedStateOf {
