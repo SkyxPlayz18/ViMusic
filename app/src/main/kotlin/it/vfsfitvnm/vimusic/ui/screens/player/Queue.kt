@@ -499,10 +499,12 @@ LaunchedEffect(reorderingState.isDragging) {
                         modifier = Modifier
                             .clip(16.dp.roundedShape)
                             .clickable {
-                                fun addToPlaylist query {
+                                fun addToPlaylist(playlist: Playlist, index: Int) = transaction {
+                                query {
     Database.instance.addMediaItemsToPlaylistAtTop(
         playlist = Playlist(name = text),
         mediaItems = windows.map { it.mediaItem }
+        }
     )
                                 }
     
