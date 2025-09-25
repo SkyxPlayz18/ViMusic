@@ -104,36 +104,17 @@ fun PlaylistSongList(
     onDismiss = { isImportingPlaylist = false },
     onAccept = { text ->
         query {
-            transaction {
-                val playlistId = Database.instance.insert(
-                    Playlist(
-                        name = text,
-                        browseId = browseId,
-                        thumbnail = playlistPage?.thumbnail?.url
-                    )
-                )
-
-                val mediaItems = playlistPage?.songsPage?.items
-                    ?.map(Innertube.SongItem::asMediaItem)
-                    .orEmpty()
-
-                mediaItems.forEach { Database.instance.insert(it) }
-
-                val minPos = (Database.instance.getMinPosition(playlistId) ?: 0)
-
-                val maps = mediaItems.mapIndexed { index, mediaItem ->
-                    SongPlaylistMap(
-                        songId = mediaItem.mediaId,
-                        playlistId = playlistId,
-                        position = minPos - 1
-                    )
-                }
-
-                if (maps.isNotEmpty()) Database.instance.insertSongPlaylistMaps(maps)
-            }
+    Database.instance.addMediaItemsToPlaylistAtTop(
+        playlist = Playlist(
+            name = text,
+            browseId = browseId,
+            thumbnail = playlistPage?.thumbnail?.url
+        ),
+        mediaItems = playlistPage?.songsPage?.items
+            ?.map(Innertube.SongItem::asMediaItem)
+            .orEmpty()
+    )
         }
-    }
-) // <- JANGAN LUPA tutup ini
 
     val headerContent: @Composable () -> Unit = {
         if (playlistPage == null) HeaderPlaceholder(modifier = Modifier.shimmer())
