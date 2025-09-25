@@ -35,7 +35,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -117,8 +116,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
-import kotlinx.coroutines.flow.collect
-
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -159,14 +156,9 @@ var isDraggingQueue by remember { mutableStateOf(false) }
 val reorderingState = rememberReorderingState(
     lazyListState = lazyListState,
     key = windows,
-    onDragEnd = { fromIndex, toIndex ->
-        binder.player.moveMediaItem(fromIndex, toIndex)
-        // jangan ubah DB di sini
-    }
+    onDragEnd = binder.player::moveMediaItem
 )
-LaunchedEffect(reorderingState.isDragging) {
-    binder.isDraggingQueue = reorderingState.isDragging
-}
+
     val visibleSuggestions by remember {
         derivedStateOf {
             suggestions
@@ -499,14 +491,25 @@ LaunchedEffect(reorderingState.isDragging) {
                         modifier = Modifier
                             .clip(16.dp.roundedShape)
                             .clickable {
-                            fun addToPlaylist(playlist: Playlist, index: Int) = transaction {
-    Database.instance.addMediaItemsToPlaylistAtTop(
-        playlist = playlist,
-        mediaItems = windows.map { it.mediaItem }
-    )
-                            }
+                                fun addToPlaylist(playlist: Playlist, index: Int) = transaction {
+                                    val playlistId = Database.instance
+                                        .insert(playlist)
+                                        .takeIf { it != -1L } ?: playlist.id
+
+                                    windows.forEachIndexed { i, window ->
+                                        val mediaItem = window.mediaItem
+
+                                        Database.instance.insert(mediaItem)
+                                        Database.instance.insert(
+                                            SongPlaylistMap(
+                                                songId = mediaItem.mediaId,
+                                                playlistId = playlistId,
+                                                position = index + i
+                                            )
+                                        )
+                                    }
                                 }
-                            
+    
                                 menuState.display {
                                     var isCreatingNewPlaylist by rememberSaveable {
                                         mutableStateOf(
@@ -587,7 +590,7 @@ LaunchedEffect(reorderingState.isDragging) {
                                         }
                                     }
                                 }
-                            )
+                            }
                             .background(colorPalette.background1)
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                     )
