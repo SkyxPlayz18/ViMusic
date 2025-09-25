@@ -499,9 +499,7 @@ LaunchedEffect(reorderingState.isDragging) {
                         modifier = Modifier
                             .clip(16.dp.roundedShape)
                             .clickable {
-                                onAccept = { text ->
-    menuState.hide()
-    transaction {
+                            transaction {
         Database.instance.addMediaItemsToPlaylistAtTop(
             playlist = Playlist(name = text),
             mediaItems = windows.map { it.mediaItem }
@@ -530,7 +528,12 @@ LaunchedEffect(reorderingState.isDragging) {
                                         onDismiss = { isCreatingNewPlaylist = false },
                                         onAccept = { text ->
                                             menuState.hide()
-                                            addToPlaylist(Playlist(name = text), 0)
+                                            transaction {
+    Database.instance.addMediaItemsToPlaylistAtTop(
+        playlist = Playlist(name = text),
+        mediaItems = windows.map { it.mediaItem }
+    )
+                                            }
                                         }
                                     )
 
@@ -580,9 +583,12 @@ LaunchedEffect(reorderingState.isDragging) {
                                                 ),
                                                 onClick = {
                                                     menuState.hide()
-                                                    addToPlaylist(
-                                                        playlistPreview.playlist,
-                                                        playlistPreview.songCount
+                                                    transaction {
+    Database.instance.addMediaItemsToPlaylistAtTop(
+        playlist = Playlist(name = text),
+        mediaItems = windows.map { it.mediaItem }
+    )
+                                                    }
                                                     )
                                                 }
                                             )
