@@ -515,7 +515,7 @@ LaunchedEffect(reorderingState.isDragging) {
                                         Database.instance
                                             .playlistPreviews(
                                                 sortBy = PlaylistSortBy.DateAdded,
-                                                sortOrder = SortOrder.Descending
+                                                sortOrder = SortOrder.Ascending
                                             )
                                             .onFirst { isCreatingNewPlaylist = it.isEmpty() }
                                     }.collectAsState(initial = null, context = Dispatchers.IO)
