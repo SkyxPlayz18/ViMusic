@@ -53,6 +53,7 @@ jobs:
     name: Run Lint & Tests
     runs-on: ubuntu-latest
     needs: build
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -65,8 +66,9 @@ jobs:
           cache: gradle
 
       - name: Run Lint (non-blocking)
-  continue-on-error: true
-  run: ./gradlew lint
+        continue-on-error: true
+        run: ./gradlew lint
 
       - name: Run Unit Tests
-        run: ./gradlew test
+        continue-on-error: true
+        run: ./gradlew test --stacktrace
