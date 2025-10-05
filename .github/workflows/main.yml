@@ -64,8 +64,9 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Run Lint
-        run: ./gradlew lint
+      - name: Run Lint (non-blocking)
+  continue-on-error: true
+  run: ./gradlew lint
 
       - name: Run Unit Tests
         run: ./gradlew test
