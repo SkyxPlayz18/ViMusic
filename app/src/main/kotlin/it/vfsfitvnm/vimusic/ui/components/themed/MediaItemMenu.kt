@@ -222,17 +222,19 @@ fun BaseMediaItemMenu(
         onStartRadio = onStartRadio,
         onPlayNext = onPlayNext,
         onEnqueue = onEnqueue,
-        onAddToPlaylist = { playlist, position ->
-            transaction {
-                Database.instance.insert(mediaItem)
-                Database.instance.insert(
-                    SongPlaylistMap(
-                        songId = mediaItem.mediaId,
-                        playlistId = Database.instance.insert(playlist).takeIf { it != -1L } ?: playlist.id,
-                        position = position
-                    )
-                )
-            }
+        onAddToPlaylist = { playlist, _ ->
+    transaction {
+        Database.instance.insert(mediaItem)
+        val targetPlaylistId = Database.instance.insert(playlist).takeIf { it != -1L } ?: playlist.id
+        val newPosition = Database.instance.getNextTopPosition(targetPlaylistId)
+        Database.instance.insert(
+            SongPlaylistMap(
+                songId = mediaItem.mediaId,
+                playlistId = targetPlaylistId,
+                position = newPosition
+            )
+        )
+    }
         },
         onHideFromDatabase = onHideFromDatabase,
         onRemoveFromPlaylist = onRemoveFromPlaylist,
