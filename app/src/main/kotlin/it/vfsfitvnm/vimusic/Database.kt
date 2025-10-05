@@ -398,6 +398,11 @@ suspend fun getSongById(id: String): Song?
     @Query("SELECT MAX(position) FROM SongPlaylistMap WHERE playlistId = :playlistId")
 fun getMaxPosition(playlistId: Long): Int?
 
+    fun getNextTopPosition(playlistId: Long): Int {
+    val min = getMinPosition(playlistId)
+    return if (min == null) 0 else min - 1
+    }
+
 @Transaction
 fun addMediaItemsToPlaylistAtTop(playlist: Playlist, mediaItems: List<MediaItem>) {
     val playlistId = insert(playlist).takeIf { it != -1L } ?: playlist.id
