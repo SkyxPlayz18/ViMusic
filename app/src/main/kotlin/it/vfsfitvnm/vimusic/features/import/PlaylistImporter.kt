@@ -75,35 +75,39 @@ class PlaylistImporter {
                 coroutineScope {
                     val deferredSongsInBatch = batch.map { track ->
                         async(Dispatchers.IO) {
-                            // --- REPLACE THE SEARCH BLOCK WITH THIS ---
-val cleanedQuery = track.title
-    .replace(Regex("\\(.*?\\)"), "")
-    .replace(Regex("\\[.*?\\]"), "")
-    .replace(Regex("(?i)(official|lyrics|audio|video|feat\\.?|ft\\.?|remix|live)"), "")
+                            // 🔧 Bersihkan query biar hasil pencarian lebih akurat
+val cleanedTitle = track.title
+    .replace(Regex("\\(.*?\\)"), "") // hapus isi tanda kurung ()
+    .replace(Regex("\\[.*?\\]"), "") // hapus isi tanda kurung []
+    .replace(Regex("(?i)(official|lyrics|audio|video|feat\\.?|ft\\.?|remix|live|version|cover)"), "")
     .trim()
 
-val searchQuery = "$cleanedQuery ${track.artist} ${track.album ?: ""}".trim()
+val cleanedArtist = track.artist
+    .replace(Regex("(?i)(,|&|feat\\.?|ft\\.?)"), " ")
+    .trim()
 
-// 🔍 Pencarian utama (pakai filter Song lewat SearchBody.params)
+val searchQuery = "$cleanedTitle $cleanedArtist ${track.album ?: ""}".trim()
+
+// 🔍 Pencarian utama pakai filter Song
 var searchCandidates = Innertube.searchPage(
-    body = SearchBody(query = searchQuery, params = Innertube.SearchFilter.Song.value),
-    fromMusicShelfRendererContent = Innertube.SongItem.Companion::from
-)?.getOrNull()?.items
+    body = SearchBody(query = searchQuery, params = Innertube.SearchFilter.Song.value)
+) { content ->
+    content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
+}?.getOrNull()?.items
 
-// 🔁 Fallback: kalau hasil kosong, cari ulang tanpa filter (lebih luas)
+// 🔁 Fallback kalau hasil kosong, cari ulang tanpa filter biar lebih luas
 if (searchCandidates.isNullOrEmpty()) {
-    Log.w("Importer", "Fallback search (no results): $searchQuery")
+    Log.w("PlaylistImporter", "Fallback search (no results): $searchQuery")
     searchCandidates = Innertube.searchPage(
-        body = SearchBody(query = searchQuery, params = ""),
-        fromMusicShelfRendererContent = Innertube.SongItem.Companion::from
-    )?.getOrNull()?.items
+        body = SearchBody(query = searchQuery)
+    ) { content ->
+        content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
+    }?.getOrNull()?.items
 }
 
 if (searchCandidates.isNullOrEmpty()) {
-    // tetap pake return@async null seperti lo mau
     return@async null
 }
-// --- END REPLACEMENT ---
                             val bestMatch = findBestMatchInResults(track, searchCandidates)
                             bestMatch?.let {
                                 // Extract artist information with IDs
