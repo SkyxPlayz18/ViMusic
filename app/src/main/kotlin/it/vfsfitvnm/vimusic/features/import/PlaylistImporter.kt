@@ -213,11 +213,28 @@ class PlaylistImporter {
             candidate to score
         }
 
-        return scoredCandidates
-            .filter { (_, score) -> score > MINIMUM_SCORE_THRESHOLD }
-            .maxByOrNull { (_, score) -> score }
-            ?.first
+        val best = scoredCandidates
+        .filter { (_, score) -> score > MINIMUM_SCORE_THRESHOLD }
+        .maxByOrNull { (_, score) -> score }
+
+    val (candidate, score) = best ?: return null
+
+    // 🧠 Validasi tambahan: pastikan judulnya benar-benar mirip
+    val importTitleClean = importTrack.title.lowercase().replace(Regex("[^a-z0-9 ]"), "")
+    val candidateTitleClean = candidate.info?.name?.lowercase()?.replace(Regex("[^a-z0-9 ]"), "") ?: ""
+
+    val titleSim = 1.0 - levenshtein(
+        importTitleClean,
+        candidateTitleClean
+    ).toDouble() / max(importTitleClean.length, candidateTitleClean.length.coerceAtLeast(1))
+
+    if (titleSim < 0.8) {
+        Log.w("Importer", "Low-confidence match: ${importTrack.title} -> ${candidate.info?.name} (score=$score, sim=${"%.2f".format(titleSim)})")
+        return null // ❌ jangan ambil kalau kemiripan di bawah 80%
     }
+
+    return candidate
+        
 
     private fun parseSongInfo(title: String, artists: String, album: String?): ProcessedSongInfo {
         val normalizedTitle = title.lowercase()
