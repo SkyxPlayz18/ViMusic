@@ -201,25 +201,31 @@ class PlaylistImporter {
         }
     }
 
-    private fun findBestMatchInResults(importTrack: SongImportInfo, candidates: List<Innertube.SongItem>): Innertube.SongItem? {
-        val importInfo = parseSongInfo(importTrack.title, importTrack.artist, importTrack.album)
+    private fun findBestMatchInResults(
+    importTrack: SongImportInfo,
+    candidates: List<Innertube.SongItem>
+): Innertube.SongItem? {
+    val importInfo = parseSongInfo(importTrack.title, importTrack.artist, importTrack.album)
 
-        val scoredCandidates = candidates.map { candidate ->
-            val candidateTitle = candidate.info?.name ?: ""
-            val candidateArtists = candidate.authors?.joinToString { it.name.toString() } ?: ""
-            val candidateAlbum = candidate.album?.name
-            val candidateInfo = parseSongInfo(candidateTitle, candidateArtists, candidateAlbum)
-            val score = calculateMatchScore(importInfo, candidateInfo, candidateAlbum)
-            candidate to score
-        }
+    // Skor tiap kandidat
+    val scoredCandidates = candidates.map { candidate ->
+        val candidateTitle = candidate.info?.name ?: ""
+        val candidateArtists = candidate.authors?.joinToString { it.name.toString() } ?: ""
+        val candidateAlbum = candidate.album?.name
+        val candidateInfo = parseSongInfo(candidateTitle, candidateArtists, candidateAlbum)
+        val score = calculateMatchScore(importInfo, candidateInfo, candidateAlbum)
+        candidate to score
+    }
 
-        val best = scoredCandidates
+    // Ambil kandidat terbaik
+    val bestPair = scoredCandidates
         .filter { (_, score) -> score > MINIMUM_SCORE_THRESHOLD }
         .maxByOrNull { (_, score) -> score }
+        ?: return null
 
-    val (candidate, score) = best ?: return null
+    val (candidate, score) = bestPair
 
-    // 🧠 Validasi tambahan: pastikan judulnya benar-benar mirip
+    // 🔍 Tambahan validasi judul biar gak salah lagu
     val importTitleClean = importTrack.title.lowercase().replace(Regex("[^a-z0-9 ]"), "")
     val candidateTitleClean = candidate.info?.name?.lowercase()?.replace(Regex("[^a-z0-9 ]"), "") ?: ""
 
@@ -229,11 +235,15 @@ class PlaylistImporter {
     ).toDouble() / max(importTitleClean.length, candidateTitleClean.length.coerceAtLeast(1))
 
     if (titleSim < 0.8) {
-        Log.w("Importer", "Low-confidence match: ${importTrack.title} -> ${candidate.info?.name} (score=$score, sim=${"%.2f".format(titleSim)})")
-        return null // ❌ jangan ambil kalau kemiripan di bawah 80%
+        Log.w(
+            "Importer",
+            "❗ Low-confidence match: ${importTrack.title} -> ${candidate.info?.name} (score=$score, sim=${"%.2f".format(titleSim)})"
+        )
+        return null // skip lagu beda jauh
     }
 
     return candidate
+    }
         
 
     private fun parseSongInfo(title: String, artists: String, album: String?): ProcessedSongInfo {
