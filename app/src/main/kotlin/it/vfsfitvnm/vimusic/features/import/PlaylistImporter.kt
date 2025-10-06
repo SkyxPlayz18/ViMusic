@@ -77,11 +77,30 @@ class PlaylistImporter {
                         async(Dispatchers.IO) {
                             val searchQuery = "${track.title} ${track.artist} ${track.album ?: ""}"
 
-                            val searchCandidates = Innertube.searchPage(
-                                body = SearchBody(query = searchQuery, params = Innertube.SearchFilter.Song.value)
-                            ) { content ->
-                                content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
-                            }?.getOrNull()?.items
+                            val cleanedQuery = track.title
+    .replace(Regex("\\(.*?\\)"), "")
+    .replace(Regex("\\[.*?\\]"), "")
+    .replace(Regex("(?i)(official|lyrics|audio|video|feat\\.?|ft\\.?|remix|live)"), "")
+    .trim()
+
+val searchQuery = "$cleanedQuery ${track.artist} ${track.album ?: ""}".trim()
+
+// 🔍 Pencarian utama (Song filter)
+var searchCandidates = Innertube.searchPage(
+    body = SearchBody(query = searchQuery, params = Innertube.SearchFilter.Song.value)
+) { content ->
+    content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
+}?.getOrNull()?.items
+
+// 🔁 Fallback: kalau hasil kosong, cari ulang tanpa filter biar lebih luas
+if (searchCandidates.isNullOrEmpty()) {
+    Log.w("Importer", "Fallback search (no results): $searchQuery")
+    searchCandidates = Innertube.searchPage(
+        body = SearchBody(query = searchQuery),
+    ) { content ->
+        content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
+    }?.getOrNull()?.items
+}
 
                             if (searchCandidates.isNullOrEmpty()) {
                                 return@async null
