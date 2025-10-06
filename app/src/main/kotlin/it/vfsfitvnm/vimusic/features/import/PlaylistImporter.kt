@@ -99,8 +99,7 @@ if (searchCandidates.isNullOrEmpty()) {
         content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
     }?.getOrNull()?.items
 }
-
-                            if (searchCandidates.isNullOrEmpty()) {
+{
                                 return@async null
                             }
 
