@@ -75,7 +75,8 @@ class PlaylistImporter {
                 coroutineScope {
                     val deferredSongsInBatch = batch.map { track ->
                         async(Dispatchers.IO) {
-                            val cleanedQuery = track.title
+                            // --- REPLACE THE SEARCH BLOCK WITH THIS ---
+val cleanedQuery = track.title
     .replace(Regex("\\(.*?\\)"), "")
     .replace(Regex("\\[.*?\\]"), "")
     .replace(Regex("(?i)(official|lyrics|audio|video|feat\\.?|ft\\.?|remix|live)"), "")
@@ -83,28 +84,26 @@ class PlaylistImporter {
 
 val searchQuery = "$cleanedQuery ${track.artist} ${track.album ?: ""}".trim()
 
-// 🔍 Pencarian utama (pakai filter Song)
+// 🔍 Pencarian utama (pakai filter Song lewat SearchBody.params)
 var searchCandidates = Innertube.searchPage(
-    body = SearchBody(query = searchQuery),
-    params = "EgWKAQIIAWoMEA4QChADEAQQCRAF" // filter lagu (YouTube Music type=SONG)
-) { content ->
-    content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
-}?.getOrNull()?.items
+    body = SearchBody(query = searchQuery, params = Innertube.SearchFilter.Song.value),
+    fromMusicShelfRendererContent = Innertube.SongItem.Companion::from
+)?.getOrNull()?.items
 
-// 🔁 Fallback: kalau hasil kosong, cari ulang tanpa filter (biar lebih luas)
+// 🔁 Fallback: kalau hasil kosong, cari ulang tanpa filter (lebih luas)
 if (searchCandidates.isNullOrEmpty()) {
     Log.w("Importer", "Fallback search (no results): $searchQuery")
     searchCandidates = Innertube.searchPage(
-        body = SearchBody(query = searchQuery),
-        params = "" // default kosong, biar nyari semua jenis hasil (lagu, video, dll)
-    ) { content ->
-        content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
-    }?.getOrNull()?.items
+        body = SearchBody(query = searchQuery, params = ""),
+        fromMusicShelfRendererContent = Innertube.SongItem.Companion::from
+    )?.getOrNull()?.items
 }
 
 if (searchCandidates.isNullOrEmpty()) {
+    // tetap pake return@async null seperti lo mau
     return@async null
 }
+// --- END REPLACEMENT ---
                             val bestMatch = findBestMatchInResults(track, searchCandidates)
                             bestMatch?.let {
                                 // Extract artist information with IDs
