@@ -75,8 +75,6 @@ class PlaylistImporter {
                 coroutineScope {
                     val deferredSongsInBatch = batch.map { track ->
                         async(Dispatchers.IO) {
-                            val searchQuery = "${track.title} ${track.artist} ${track.album ?: ""}"
-
                             val cleanedQuery = track.title
     .replace(Regex("\\(.*?\\)"), "")
     .replace(Regex("\\[.*?\\]"), "")
