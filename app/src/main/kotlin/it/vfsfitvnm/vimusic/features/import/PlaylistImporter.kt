@@ -99,10 +99,10 @@ if (searchCandidates.isNullOrEmpty()) {
         content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
     }?.getOrNull()?.items
 }
-{
-                                return@async null
-                            }
 
+                            if (searchCandidates.isNullOrEmpty()) {
+        return@async null
+                            }
                             val bestMatch = findBestMatchInResults(track, searchCandidates)
                             bestMatch?.let {
                                 // Extract artist information with IDs
