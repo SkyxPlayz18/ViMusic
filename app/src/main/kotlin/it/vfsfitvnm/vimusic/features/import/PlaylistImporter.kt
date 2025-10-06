@@ -84,8 +84,9 @@ class PlaylistImporter {
 val searchQuery = "$cleanedQuery ${track.artist} ${track.album ?: ""}".trim()
 
 // 🔍 Pencarian utama (Song filter)
+// Fallback tanpa filter
 var searchCandidates = Innertube.searchPage(
-    body = SearchBody(query = searchQuery, params = Innertube.SearchFilter.Song.value)
+    body = SearchBody(query = searchQuery, params = "")
 ) { content ->
     content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
 }?.getOrNull()?.items
