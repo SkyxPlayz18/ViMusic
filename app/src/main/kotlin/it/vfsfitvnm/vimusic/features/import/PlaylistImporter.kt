@@ -75,10 +75,9 @@ class PlaylistImporter {
                 coroutineScope {
                     val deferredSongsInBatch = batch.map { track ->
                         async(Dispatchers.IO) {
-                            // 🔧 Bersihkan query biar hasil pencarian lebih akurat
-val cleanedTitle = track.title
-    .replace(Regex("\\(.*?\\)"), "") // hapus isi tanda kurung ()
-    .replace(Regex("\\[.*?\\]"), "") // hapus isi tanda kurung []
+                            val cleanedTitle = track.title
+    .replace(Regex("\\(.*?\\)"), "")
+    .replace(Regex("\\[.*?\\]"), "")
     .replace(Regex("(?i)(official|lyrics|audio|video|feat\\.?|ft\\.?|remix|live|version|cover)"), "")
     .trim()
 
@@ -88,18 +87,24 @@ val cleanedArtist = track.artist
 
 val searchQuery = "$cleanedTitle $cleanedArtist ${track.album ?: ""}".trim()
 
-// 🔍 Pencarian utama pakai filter Song
+// 🔍 Pencarian utama (pakai filter Song)
 var searchCandidates = Innertube.searchPage(
-    body = SearchBody(query = searchQuery, params = Innertube.SearchFilter.Song.value)
+    body = SearchBody(
+        query = searchQuery,
+        params = Innertube.SearchFilter.Song.value // ✅ param WAJIB diisi
+    )
 ) { content ->
     content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
 }?.getOrNull()?.items
 
-// 🔁 Fallback kalau hasil kosong, cari ulang tanpa filter biar lebih luas
+// 🔁 Fallback kalau hasil kosong
 if (searchCandidates.isNullOrEmpty()) {
     Log.w("PlaylistImporter", "Fallback search (no results): $searchQuery")
     searchCandidates = Innertube.searchPage(
-        body = SearchBody(query = searchQuery)
+        body = SearchBody(
+            query = searchQuery,
+            params = "" // ✅ isi string kosong biar gak error
+        )
     ) { content ->
         content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
     }?.getOrNull()?.items
