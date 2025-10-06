@@ -83,27 +83,28 @@ class PlaylistImporter {
 
 val searchQuery = "$cleanedQuery ${track.artist} ${track.album ?: ""}".trim()
 
-// 🔍 Pencarian utama (Song filter)
-// Fallback tanpa filter
+// 🔍 Pencarian utama (pakai filter Song)
 var searchCandidates = Innertube.searchPage(
-    body = SearchBody(query = searchQuery, params = "")
+    body = SearchBody(query = searchQuery),
+    params = "EgWKAQIIAWoMEA4QChADEAQQCRAF" // filter lagu (YouTube Music type=SONG)
 ) { content ->
     content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
 }?.getOrNull()?.items
 
-// 🔁 Fallback: kalau hasil kosong, cari ulang tanpa filter biar lebih luas
+// 🔁 Fallback: kalau hasil kosong, cari ulang tanpa filter (biar lebih luas)
 if (searchCandidates.isNullOrEmpty()) {
     Log.w("Importer", "Fallback search (no results): $searchQuery")
     searchCandidates = Innertube.searchPage(
         body = SearchBody(query = searchQuery),
+        params = "" // default kosong, biar nyari semua jenis hasil (lagu, video, dll)
     ) { content ->
         content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
     }?.getOrNull()?.items
 }
 
-                            if (searchCandidates.isNullOrEmpty()) {
-        return@async null
-                            }
+if (searchCandidates.isNullOrEmpty()) {
+    return@async null
+}
                             val bestMatch = findBestMatchInResults(track, searchCandidates)
                             bestMatch?.let {
                                 // Extract artist information with IDs
