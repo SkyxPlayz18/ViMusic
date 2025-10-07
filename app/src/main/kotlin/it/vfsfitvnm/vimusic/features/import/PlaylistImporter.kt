@@ -64,7 +64,7 @@ class PlaylistImporter {
     ) {
         try {
             val totalTracks = songList.size
-            val songsToAdd = mutableListOf<Pair<Song, List<it.vfsfitvnm.providers.innertube.models.NavigationEndpoint.Info<it.vfsfitvnm.providers.innertube.models.NavigationEndpoint.Endpoint.Browse>>>>()
+            val songsToAdd = mutableListOf<Pair<Song, List<it.vfsfitvnm.providers.innertube.models.NavigationEndpoint.Endpoint.Browse>>>()
             val failedTracks = mutableListOf<SongImportInfo>()
             var processedCount = 0
 
@@ -103,7 +103,7 @@ class PlaylistImporter {
                                     val res = Innertube.searchPage(
                                         body = SearchBody(query = q, params = Innertube.SearchFilter.Song.value)
                                     ) { content ->
-                                        content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
+                                        Innertube.SongItem.from(content)
                                     }?.getOrNull()?.items
 
                                     if (!res.isNullOrEmpty()) {
