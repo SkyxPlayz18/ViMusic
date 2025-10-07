@@ -187,45 +187,32 @@ class PlaylistImporter {
             }
 
             if (songsToAdd.isNotEmpty()) {
-                transaction {
-                    val newPlaylist = Playlist(name = playlistName)
-                    val newPlaylistId = Database.instance.insert(newPlaylist)
-                    if (newPlaylistId != -1L) {
-                        songsToAdd.forEachIndexed { index, (song, artistsWithEndpoints) ->
-                            // Use upsert to handle duplicates without crashing
-                            Database.instance.upsert(song)
+    transaction {
+        val newPlaylist = Playlist(name = playlistName)
+        val newPlaylistId = Database.instance.insert(newPlaylist)
+        if (newPlaylistId != -1L) {
+            val playlistEntity = newPlaylist.copy(id = newPlaylistId)
 
-                            artistsWithEndpoints.forEach { artistInfo ->
-                                val artistId = artistInfo.endpoint?.browseId
-                                val artistName = artistInfo.name
-                                if (artistId != null && artistName != null) {
-                                    Database.instance.upsert(
-                                        Artist(
-                                            id = artistId,
-                                            name = artistName
-                                        )
-                                    )
-                                    // Use upsert to handle duplicate song-artist relationships
-                                    Database.instance.upsert(
-                                        SongArtistMap(
-                                            songId = song.id,
-                                            artistId = artistId
-                                        )
-                                    )
-                                }
-                            }
-
-                            Database.instance.insert(
-                                SongPlaylistMap(
-                                    songId = song.id,
-                                    playlistId = newPlaylistId,
-                                    position = index
-                                )
-                            )
-                        }
-                    }
-                }
+            // Gunakan helper bawaan agar lagu ditambahkan di atas
+            val mediaItems = songsToAdd.map { (song, _) ->
+                it.vfsfitvnm.vimusic.models.MediaItem(
+                    mediaId = song.id,
+                    title = song.title,
+                    artist = song.artistsText ?: "",
+                    durationText = song.durationText,
+                    thumbnailUrl = song.thumbnailUrl,
+                    album = song.album
+                )
             }
+
+            Database.instance.addMediaItemsToPlaylistAtTop(
+                playlist = playlistEntity,
+                mediaItems = mediaItems
+            )
+        }
+    }
+            }
+            
 
             onProgressUpdate(ImportStatus.Complete(
                 imported = songsToAdd.size,
