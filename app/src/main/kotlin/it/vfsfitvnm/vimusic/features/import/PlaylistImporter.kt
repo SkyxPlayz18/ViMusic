@@ -99,11 +99,11 @@ class PlaylistImporter {
                                     Log.d("Importer", "Search: \"$q\"")
 
                                     val result = Innertube.searchPage(
-                                        body = SearchBody(query = q)
-                                    ) { content ->
-                                        // pakai SongItem.from(content) biar gak error unresolved reference
-                                        Innertube.SongItem.from(content)
-                                    }?.getOrNull()?.items?.filterIsInstance<Innertube.SongItem>()
+    body = SearchBody(query = q),
+    params = Innertube.SearchFilter.Song.value
+) { content: it.vfsfitvnm.providers.innertube.models.Item ->
+    Innertube.SongItem.from(content)
+}?.getOrNull()?.items?.filterIsInstance<Innertube.SongItem>()
 
                                     if (!result.isNullOrEmpty()) {
                                         searchCandidates = result
