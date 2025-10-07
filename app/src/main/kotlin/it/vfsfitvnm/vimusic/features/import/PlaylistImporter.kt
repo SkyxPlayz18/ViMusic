@@ -122,7 +122,7 @@ class PlaylistImporter {
                     // Tambahkan lagu ke atas playlist, bukan insert manual
                     Database.instance.addMediaItemsToPlaylistAtTop(
                         playlist = Playlist(id = playlistId, name = playlistName),
-                        mediaItems = songsToAdd.map { it.asMediaItem() }
+                        mediaItems = songsToAdd.map { it.asMediaItem }
                     )
                 }
             }
