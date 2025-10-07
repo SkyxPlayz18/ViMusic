@@ -2,17 +2,11 @@ package it.vfsfitvnm.vimusic.features.import
 
 import android.util.Log
 import it.vfsfitvnm.vimusic.Database
-import it.vfsfitvnm.vimusic.models.Playlist
-import it.vfsfitvnm.vimusic.models.Song
-import it.vfsfitvnm.vimusic.models.Artist
-import it.vfsfitvnm.vimusic.models.SongArtistMap
+import it.vfsfitvnm.vimusic.models.*
 import it.vfsfitvnm.vimusic.transaction
 import it.vfsfitvnm.providers.innertube.Innertube
 import it.vfsfitvnm.providers.innertube.models.bodies.SearchBody
-import it.vfsfitvnm.providers.innertube.models.NavigationEndpoint
 import it.vfsfitvnm.providers.innertube.requests.searchPage
-import it.vfsfitvnm.providers.innertube.utils.from
-import it.vfsfitvnm.vimusic.utils.asMediaItem // penting biar bisa konversi ke MediaItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -29,24 +23,37 @@ data class SongImportInfo(
 sealed class ImportStatus {
     data object Idle : ImportStatus()
     data class InProgress(val processed: Int, val total: Int) : ImportStatus()
-    data class Complete(val imported: Int, val failed: Int, val total: Int, val failedTracks: List<SongImportInfo>) : ImportStatus()
+    data class Complete(
+        val imported: Int,
+        val failed: Int,
+        val total: Int,
+        val failedTracks: List<SongImportInfo>
+    ) : ImportStatus()
     data class Error(val message: String) : ImportStatus()
 }
 
 class PlaylistImporter {
+    private data class ProcessedSongInfo(
+        val baseTitle: String,
+        val primaryArtist: String,
+        val allArtists: List<String>,
+        val modifiers: Set<String>,
+        val album: String?
+    )
 
     companion object {
-        private const val MINIMUM_SCORE_THRESHOLD = 60
+        private const val MINIMUM_SCORE_THRESHOLD = 45 // Lebih longgar biar gak banyak gagal
         private const val PRIMARY_ARTIST_EXACT_MATCH_BONUS = 40
         private const val OTHER_ARTIST_MATCH_BONUS = 10
         private const val TITLE_SIMILARITY_WEIGHT = 50
         private const val ALBUM_MATCH_BONUS = 30
         private const val MODIFIER_MATCH_BONUS = 25
         private const val MODIFIER_MISMATCH_PENALTY = 40
+
         private val KNOWN_MODIFIERS = setOf(
             "remix", "edit", "mix", "live", "cover", "instrumental", "karaoke",
-            "acoustic", "unplugged", "reverb", "slowed", "sped up", "chopped", "screwed",
-            "deluxe", "version", "edition", "ultra"
+            "acoustic", "unplugged", "reverb", "slowed", "sped up", "chopped",
+            "screwed", "deluxe", "version", "edition", "ultra"
         )
     }
 
@@ -69,44 +76,103 @@ class PlaylistImporter {
                 coroutineScope {
                     val deferredSongs = batch.map { track ->
                         async(Dispatchers.IO) {
-                            val cleanedQuery = track.title
-                                .replace(Regex("\\(.*?\\)"), "")
-                                .replace(Regex("\\[.*?\\]"), "")
-                                .replace(Regex("(?i)\\b(official|lyrics|audio|video|feat\\.?|ft\\.?|remix|live)\\b"), "")
-                                .replace(Regex("\\s+"), " ")
-                                .trim()
+                            try {
+                                val cleanedQuery = track.title
+                                    .replace(Regex("\\(.*?\\)"), "")
+                                    .replace(Regex("\\[.*?\\]"), "")
+                                    .replace(Regex("(?i)\\b(official|lyrics|audio|video)\\b"), "")
+                                    .replace(Regex("\\s+"), " ")
+                                    .trim()
 
-                            val query = "$cleanedQuery ${track.artist} ${track.album ?: ""}".trim()
+                                val queries = listOf(
+                                    "$cleanedQuery ${track.artist} ${track.album ?: ""}".trim(),
+                                    "$cleanedQuery ${track.artist}".trim(),
+                                    "${track.title} ${track.artist}".trim(),
+                                    "$cleanedQuery".trim(),
+                                    track.title.trim()
+                                ).distinct()
 
-                            val searchResult = Innertube.searchPage(
-                                body = SearchBody(query = query, params = Innertube.SearchFilter.Song.value)
-                            ) { content ->
-                                content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
-                            }?.getOrNull()?.items
+                                var searchCandidates: List<Innertube.SongItem>? = null
+                                var usedQuery: String? = null
 
-                            if (searchResult.isNullOrEmpty()) return@async null
+                                for (q in queries) {
+                                    if (q.isBlank()) continue
+                                    usedQuery = q
+                                    Log.d("Importer", "Search: \"$q\"")
 
-                            val bestMatch = findBestMatchInResults(track, searchResult)
-                            bestMatch?.let {
+                                    // cari versi filter Song
+                                    val result = Innertube.searchPage(
+                                        body = SearchBody(query = q, params = Innertube.SearchFilter.Song.value)
+                                    ) { content ->
+                                        content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
+                                    }?.getOrNull()?.items
+
+                                    if (!result.isNullOrEmpty()) {
+                                        searchCandidates = result
+                                        break
+                                    }
+
+                                    // fallback tanpa filter
+                                    val fallback = Innertube.searchPage(
+                                        body = SearchBody(query = q)
+                                    ) { content ->
+                                        content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
+                                    }?.getOrNull()?.items
+
+                                    if (!fallback.isNullOrEmpty()) {
+                                        searchCandidates = fallback
+                                        break
+                                    }
+                                }
+
+                                if (searchCandidates.isNullOrEmpty()) {
+                                    Log.w("ImporterDebug", "❌ No result for ${track.title} – $usedQuery")
+                                    return@async null
+                                }
+
+                                val bestMatch = findBestMatchInResults(track, searchCandidates)
+                                if (bestMatch == null) {
+                                    Log.w("ImporterDebug", "⚠️ No match above threshold for ${track.title}")
+                                    return@async null
+                                }
+
+                                // ambil artist info
+                                val artistsWithEndpoints = bestMatch.authors?.filter {
+                                    val name = it.name?.trim() ?: ""
+                                    it.endpoint != null && name.isNotEmpty() && !name.contains(":")
+                                } ?: emptyList()
+
+                                val artistsText = when (artistsWithEndpoints.size) {
+                                    0 -> ""
+                                    1 -> artistsWithEndpoints[0].name.toString()
+                                    2 -> "${artistsWithEndpoints[0].name} & ${artistsWithEndpoints[1].name}"
+                                    else -> {
+                                        val allButLast = artistsWithEndpoints.dropLast(1)
+                                            .joinToString(", ") { it.name.toString() }
+                                        val last = artistsWithEndpoints.last().name.toString()
+                                        "$allButLast & $last"
+                                    }
+                                }
+
                                 Song(
-                                    id = it.info?.endpoint?.videoId ?: "",
-                                    title = it.info?.name ?: track.title,
-                                    artistsText = it.authors?.joinToString(", ") { a -> a.name ?: "" } ?: track.artist,
-                                    durationText = it.durationText,
-                                    thumbnailUrl = it.thumbnail?.url,
-                                    album = it.album?.name ?: track.album
+                                    id = bestMatch.info?.endpoint?.videoId ?: "",
+                                    title = bestMatch.info?.name ?: "",
+                                    artistsText = artistsText,
+                                    durationText = bestMatch.durationText,
+                                    thumbnailUrl = bestMatch.thumbnail?.url,
+                                    album = bestMatch.album?.name
                                 )
+                            } catch (t: Throwable) {
+                                Log.e("ImporterErr", "Error ${track.title}: ${t.message}")
+                                return@async null
                             }
                         }
                     }
 
                     val results = deferredSongs.awaitAll()
                     results.forEachIndexed { i, song ->
-                        if (song != null && song.id.isNotBlank()) {
-                            songsToAdd.add(song)
-                        } else {
-                            failedTracks.add(batch[i])
-                        }
+                        if (song != null && song.id.isNotBlank()) songsToAdd.add(song)
+                        else failedTracks.add(batch[i])
                     }
                 }
 
@@ -117,11 +183,8 @@ class PlaylistImporter {
             if (songsToAdd.isNotEmpty()) {
                 transaction {
                     val playlist = Playlist(name = playlistName)
-                    val playlistId = Database.instance.insert(playlist).takeIf { it != -1L } ?: playlist.id
-
-                    // Tambahkan lagu ke atas playlist, bukan insert manual
                     Database.instance.addMediaItemsToPlaylistAtTop(
-                        playlist = Playlist(id = playlistId, name = playlistName),
+                        playlist = playlist,
                         mediaItems = songsToAdd.map { it.asMediaItem }
                     )
                 }
@@ -137,68 +200,102 @@ class PlaylistImporter {
             )
 
         } catch (e: Exception) {
-            Log.e("PlaylistImporter", "Error importing playlist", e)
+            Log.e("PlaylistImporter", "Import failed: ${e.message}")
             onProgressUpdate(ImportStatus.Error(e.message ?: unknownErrorMessage))
         }
     }
 
+    // ===== Matching logic =====
     private fun findBestMatchInResults(importTrack: SongImportInfo, candidates: List<Innertube.SongItem>): Innertube.SongItem? {
         val importInfo = parseSongInfo(importTrack.title, importTrack.artist, importTrack.album)
 
-        val scoredCandidates = candidates.map { candidate ->
-            val candidateTitle = candidate.info?.name ?: ""
-            val candidateArtists = candidate.authors?.joinToString { it.name.toString() } ?: ""
-            val candidateAlbum = candidate.album?.name
-            val candidateInfo = parseSongInfo(candidateTitle, candidateArtists, candidateAlbum)
-            val score = calculateMatchScore(importInfo, candidateInfo, candidateAlbum)
+        val scored = candidates.map { candidate ->
+            val title = candidate.info?.name ?: ""
+            val artists = candidate.authors?.joinToString { it.name.toString() } ?: ""
+            val album = candidate.album?.name
+            val info = parseSongInfo(title, artists, album)
+            val score = calculateMatchScore(importInfo, info, album)
             candidate to score
         }
 
-        return scoredCandidates.filter { it.second > MINIMUM_SCORE_THRESHOLD }.maxByOrNull { it.second }?.first
+        return scored.filter { it.second > MINIMUM_SCORE_THRESHOLD }
+            .maxByOrNull { it.second }?.first
     }
-
-    private data class ProcessedSongInfo(
-        val baseTitle: String,
-        val allArtists: List<String>,
-        val album: String?,
-        val modifiers: Set<String>
-    )
 
     private fun parseSongInfo(title: String, artists: String, album: String?): ProcessedSongInfo {
-        val normalized = title.lowercase()
-        val modifiers = KNOWN_MODIFIERS.filter { normalized.contains(it) }.toSet()
-        val cleanTitle = normalized.replace(Regex("[-()\\[\\]]"), "").trim()
-        val allArtists = artists.lowercase().split(Regex(",|&|feat\\.?|ft\\.?|with")).map { it.trim() }.filter { it.isNotEmpty() }
-        return ProcessedSongInfo(cleanTitle, allArtists, album?.lowercase(), modifiers)
+        val normalizedTitle = title.lowercase()
+        val modRegex = """[(\[].*?[)\]]|-.*""".toRegex()
+        val foundMods = modRegex.findAll(normalizedTitle)
+            .map { it.value.replace(Regex("[\\[\\]()\\-]"), "").trim() }
+            .flatMap { it.split(" ") }
+            .filter { word -> KNOWN_MODIFIERS.any { mod -> word.contains(mod) } }
+            .toSet()
+
+        val baseTitle = modRegex.replace(normalizedTitle, "").trim()
+        val allArtists = artists.lowercase()
+            .split(Regex(",|&|feat\\.?|ft\\.?|with"))
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+        return ProcessedSongInfo(
+            baseTitle = baseTitle,
+            primaryArtist = allArtists.firstOrNull() ?: "",
+            allArtists = allArtists,
+            modifiers = foundMods,
+            album = album?.lowercase()?.trim()
+        )
     }
 
-    private fun calculateMatchScore(importInfo: ProcessedSongInfo, candidateInfo: ProcessedSongInfo, candidateAlbum: String?): Int {
+    private fun calculateMatchScore(a: ProcessedSongInfo, b: ProcessedSongInfo, candidateAlbum: String?): Int {
         var score = 0
-        score += importInfo.allArtists.count { artist -> candidateInfo.allArtists.any { it.contains(artist) } } * 20
-        val titleDistance = levenshtein(importInfo.baseTitle, candidateInfo.baseTitle)
-        val maxLen = max(importInfo.baseTitle.length, candidateInfo.baseTitle.length)
-        score += ((1.0 - titleDistance.toDouble() / maxLen) * 50).toInt()
-        if (candidateAlbum?.contains(importInfo.album ?: "") == true) score += 20
-        if (importInfo.modifiers == candidateInfo.modifiers) score += 10
+
+        if (a.primaryArtist.isNotEmpty() && b.allArtists.any { it.contains(a.primaryArtist) })
+            score += PRIMARY_ARTIST_EXACT_MATCH_BONUS
+
+        score += a.allArtists.drop(1).count { importArtist ->
+            b.allArtists.any { it.contains(importArtist) }
+        } * OTHER_ARTIST_MATCH_BONUS
+
+        if (score == 0) return 0
+
+        val dist = levenshtein(a.baseTitle, b.baseTitle)
+        val maxLen = max(a.baseTitle.length, b.baseTitle.length)
+        if (maxLen > 0) score += ((1.0 - dist.toDouble() / maxLen) * TITLE_SIMILARITY_WEIGHT).toInt()
+
+        a.album?.let { impAlbum ->
+            candidateAlbum?.lowercase()?.let { candAlbum ->
+                if (candAlbum.contains(impAlbum)) score += ALBUM_MATCH_BONUS
+            }
+        }
+
+        if (a.modifiers == b.modifiers && a.modifiers.isNotEmpty())
+            score += MODIFIER_MATCH_BONUS * a.modifiers.size
+        else if (a.modifiers.isNotEmpty() && b.modifiers.isEmpty())
+            score -= MODIFIER_MISMATCH_PENALTY / 2
+        else if (a.modifiers.isEmpty() && b.modifiers.isNotEmpty())
+            score -= MODIFIER_MISMATCH_PENALTY
+
         return score
     }
 
     private fun levenshtein(lhs: CharSequence, rhs: CharSequence): Int {
-        val len0 = lhs.length + 1
-        val len1 = rhs.length + 1
-        val cost = IntArray(len0) { it }
-        val newCost = IntArray(len0)
-        for (i in 1 until len1) {
+        val l = lhs.length
+        val r = rhs.length
+        var cost = IntArray(l + 1) { it }
+        var newCost = IntArray(l + 1)
+        for (i in 1..r) {
             newCost[0] = i
-            for (j in 1 until len0) {
+            for (j in 1..l) {
                 val match = if (lhs[j - 1] == rhs[i - 1]) 0 else 1
-                val replace = cost[j - 1] + match
-                val insert = cost[j] + 1
-                val delete = newCost[j - 1] + 1
-                newCost[j] = min(min(insert, delete), replace)
+                newCost[j] = min(
+                    min(cost[j] + 1, newCost[j - 1] + 1),
+                    cost[j - 1] + match
+                )
             }
-            for (j in cost.indices) cost[j] = newCost[j]
+            val swap = cost
+            cost = newCost
+            newCost = swap
         }
-        return cost[len0 - 1]
+        return cost[l]
     }
 }
