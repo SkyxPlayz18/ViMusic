@@ -42,7 +42,7 @@ class PlaylistImporter {
     )
 
     companion object {
-        private const val MINIMUM_SCORE_THRESHOLD = 45 // Lebih longgar biar gak banyak gagal
+        private const val MINIMUM_SCORE_THRESHOLD = 45
         private const val PRIMARY_ARTIST_EXACT_MATCH_BONUS = 40
         private const val OTHER_ARTIST_MATCH_BONUS = 10
         private const val TITLE_SIMILARITY_WEIGHT = 50
@@ -93,40 +93,26 @@ class PlaylistImporter {
                                 ).distinct()
 
                                 var searchCandidates: List<Innertube.SongItem>? = null
-                                var usedQuery: String? = null
 
                                 for (q in queries) {
                                     if (q.isBlank()) continue
-                                    usedQuery = q
                                     Log.d("Importer", "Search: \"$q\"")
 
-                                    // cari versi filter Song
                                     val result = Innertube.searchPage(
-                                        body = SearchBody(query = q, params = Innertube.SearchFilter.Song.value)
+                                        body = SearchBody(query = q)
                                     ) { content ->
-                                        content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
-                                    }?.getOrNull()?.items
+                                        // pakai SongItem.from(content) biar gak error unresolved reference
+                                        Innertube.SongItem.from(content)
+                                    }?.getOrNull()?.items?.filterIsInstance<Innertube.SongItem>()
 
                                     if (!result.isNullOrEmpty()) {
                                         searchCandidates = result
                                         break
                                     }
-
-                                    // fallback tanpa filter
-                                    val fallback = Innertube.searchPage(
-                                        body = SearchBody(query = q)
-                                    ) { content ->
-                                        content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
-                                    }?.getOrNull()?.items
-
-                                    if (!fallback.isNullOrEmpty()) {
-                                        searchCandidates = fallback
-                                        break
-                                    }
                                 }
 
                                 if (searchCandidates.isNullOrEmpty()) {
-                                    Log.w("ImporterDebug", "❌ No result for ${track.title} – $usedQuery")
+                                    Log.w("ImporterDebug", "❌ No result for ${track.title}")
                                     return@async null
                                 }
 
@@ -136,28 +122,11 @@ class PlaylistImporter {
                                     return@async null
                                 }
 
-                                // ambil artist info
-                                val artistsWithEndpoints = bestMatch.authors?.filter {
-                                    val name = it.name?.trim() ?: ""
-                                    it.endpoint != null && name.isNotEmpty() && !name.contains(":")
-                                } ?: emptyList()
-
-                                val artistsText = when (artistsWithEndpoints.size) {
-                                    0 -> ""
-                                    1 -> artistsWithEndpoints[0].name.toString()
-                                    2 -> "${artistsWithEndpoints[0].name} & ${artistsWithEndpoints[1].name}"
-                                    else -> {
-                                        val allButLast = artistsWithEndpoints.dropLast(1)
-                                            .joinToString(", ") { it.name.toString() }
-                                        val last = artistsWithEndpoints.last().name.toString()
-                                        "$allButLast & $last"
-                                    }
-                                }
-
-                                Song(
+                                val artists = bestMatch.authors?.joinToString(", ") { it.name ?: "" } ?: ""
+                                return@async Song(
                                     id = bestMatch.info?.endpoint?.videoId ?: "",
                                     title = bestMatch.info?.name ?: "",
-                                    artistsText = artistsText,
+                                    artistsText = artists,
                                     durationText = bestMatch.durationText,
                                     thumbnailUrl = bestMatch.thumbnail?.url,
                                     album = bestMatch.album?.name
@@ -180,12 +149,13 @@ class PlaylistImporter {
                 onProgressUpdate(ImportStatus.InProgress(processedCount, totalTracks))
             }
 
+            // gunakan addMediaItemsToPlaylistAtTop biar lagu baru di atas, tanpa bentrok sama queue
             if (songsToAdd.isNotEmpty()) {
                 transaction {
                     val playlist = Playlist(name = playlistName)
                     Database.instance.addMediaItemsToPlaylistAtTop(
                         playlist = playlist,
-                        mediaItems = songsToAdd.map { it.asMediaItem }
+                        mediaItems = songsToAdd.map { it.asMediaItem } // pakai properti, bukan function
                     )
                 }
             }
@@ -198,7 +168,6 @@ class PlaylistImporter {
                     failedTracks = failedTracks
                 )
             )
-
         } catch (e: Exception) {
             Log.e("PlaylistImporter", "Import failed: ${e.message}")
             onProgressUpdate(ImportStatus.Error(e.message ?: unknownErrorMessage))
@@ -206,7 +175,10 @@ class PlaylistImporter {
     }
 
     // ===== Matching logic =====
-    private fun findBestMatchInResults(importTrack: SongImportInfo, candidates: List<Innertube.SongItem>): Innertube.SongItem? {
+    private fun findBestMatchInResults(
+        importTrack: SongImportInfo,
+        candidates: List<Innertube.SongItem>
+    ): Innertube.SongItem? {
         val importInfo = parseSongInfo(importTrack.title, importTrack.artist, importTrack.album)
 
         val scored = candidates.map { candidate ->
@@ -248,7 +220,6 @@ class PlaylistImporter {
 
     private fun calculateMatchScore(a: ProcessedSongInfo, b: ProcessedSongInfo, candidateAlbum: String?): Int {
         var score = 0
-
         if (a.primaryArtist.isNotEmpty() && b.allArtists.any { it.contains(a.primaryArtist) })
             score += PRIMARY_ARTIST_EXACT_MATCH_BONUS
 
