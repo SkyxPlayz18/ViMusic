@@ -7,6 +7,9 @@ import it.vfsfitvnm.vimusic.transaction
 import it.vfsfitvnm.providers.innertube.Innertube
 import it.vfsfitvnm.providers.innertube.models.bodies.SearchBody
 import it.vfsfitvnm.providers.innertube.requests.searchPage
+import it.vfsfitvnm.providers.innertube.models.Item
+import it.vfsfitvnm.providers.innertube.models.items.SongItem
+import it.vfsfitvnm.vimusic.extensions.asMediaItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -99,15 +102,15 @@ class PlaylistImporter {
                                     Log.d("Importer", "Search: \"$q\"")
 
                                     val result = Innertube.searchPage(
-    body = SearchBody(query = q),
-    params = Innertube.SearchFilter.Song.value
-) { content: it.vfsfitvnm.providers.innertube.models.Item ->
-    Innertube.SongItem.from(content)
-}?.getOrNull()?.items?.filterIsInstance<Innertube.SongItem>()
+    body = SearchBody(query = q)
+) { content ->
+    SongItem.from(content)
+}?.getOrNull()?.items?.filterIsInstance<SongItem>()
 
-                                    if (!result.isNullOrEmpty()) {
-                                        searchCandidates = result
-                                        break
+if (!result.isNullOrEmpty()) {
+    searchCandidates = result
+    break
+}
                                     }
                                 }
 
@@ -155,7 +158,7 @@ class PlaylistImporter {
                     val playlist = Playlist(name = playlistName)
                     Database.instance.addMediaItemsToPlaylistAtTop(
                         playlist = playlist,
-                        mediaItems = songsToAdd.map { it.asMediaItem } // pakai properti, bukan function
+                        mediaItems = songsToAdd.map { it.asMediaItem() }
                     )
                 }
             }
