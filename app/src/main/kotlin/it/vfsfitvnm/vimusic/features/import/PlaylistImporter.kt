@@ -161,11 +161,9 @@ class PlaylistImporter {
 
                                                 // thumbnail: try to pick first thumbnail object (model Thumbnail or ThumbnailRenderer)
                                                 val thumbnail: Thumbnail? = try {
-                                                    // many models put thumbnail under "thumbnail" -> "thumbnails"
-                                                    (mr.thumbnail?.thumbnails?.firstOrNull() as? Thumbnail)
-                                                } catch (_: Throwable) {
-                                                    null
-                                                }
+    mr.thumbnail?.let { it as? Thumbnail }
+        ?: mr.thumbnailRenderer?.thumbnail?.let { it as? Thumbnail }
+} catch (_: Throwable) { null }
 
                                                 Innertube.SongItem(
                                                     info = info,
@@ -190,7 +188,7 @@ class PlaylistImporter {
 
                                     // fallback: try without Song filter
                                     val res2 = Innertube.searchPage(
-                                        body = SearchBody(query = q)
+                                        body = SearchBody(query = q, params = null)
                                     ) { content: MusicShelfRenderer.Content ->
                                         content.musicResponsiveListItemRenderer?.let { mr ->
                                             try {
@@ -224,10 +222,9 @@ class PlaylistImporter {
                                                     ?.firstOrNull()
                                                     ?.text
                                                 val thumbnail: Thumbnail? = try {
-                                                    (mr.thumbnail?.thumbnails?.firstOrNull() as? Thumbnail)
-                                                } catch (_: Throwable) {
-                                                    null
-                                                }
+    mr.thumbnail?.let { it as? Thumbnail }
+        ?: mr.thumbnailRenderer?.thumbnail?.let { it as? Thumbnail }
+} catch (_: Throwable) { null }
                                                 Innertube.SongItem(
                                                     info = info,
                                                     authors = authors,
