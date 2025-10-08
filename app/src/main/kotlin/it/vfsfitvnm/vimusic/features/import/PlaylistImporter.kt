@@ -59,39 +59,78 @@ class PlaylistImporter {
                 coroutineScope {
                     val deferred = batch.map { song ->
                         async(Dispatchers.IO) {
-                            try {
-                                val query = buildQuery(song)
-                                val result = Innertube.searchPage(
-                                    body = SearchBody(
-                                        query = query,
-                                        params = Innertube.SearchFilter.Song.value
-                                    )
-                                ).getOrNull()  // ✅ unwrap dari Result
+    try {
+        val queries = listOf(
+            "${song.title} ${song.artist}",
+            "${song.title} ${song.album}",
+            song.title
+        )
 
-                                val items = result?.items ?: emptyList()  // ✅ fix unresolved reference
+        var searchCandidates: List<Innertube.SongItem>? = null
+        var usedQuery: String? = null
 
-                                val match = findBestMatch(song, items)
-                                if (match == null) {
-                                    Log.w("PlaylistImporter", "❌ No match for ${song.title}")
-                                    return@async null
-                                }
+        for (q in queries) {
+            if (q.isBlank()) continue
+            usedQuery = q
+            Log.d("PlaylistImporter", "Searching: \"$q\"")
 
-                                Song(
-                                    id = match.info?.endpoint?.videoId ?: "",
-                                    title = match.info?.name ?: "",
-                                    artistsText = match.authors?.joinToString(", ") { it.name ?: "" } ?: "",
-                                    durationText = match.durationText,
-                                    thumbnailUrl = match.thumbnail?.url,
-                                    album = match.album?.name,
-                                    explicit = match.explicit
-                                )
-                            } catch (t: Throwable) {
-                                Log.e("PlaylistImporter", "Error ${song.title}: ${t.message}")
-                                null
-                            }
+            // ✅ search utama (dengan filter Song)
+            val primaryResult = Innertube.searchPage(
+                body = SearchBody(query = q, params = Innertube.SearchFilter.Song.value)
+            ) { content: it.vfsfitvnm.providers.innertube.models.MusicShelfRenderer.Content ->
+                content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
+            }?.getOrNull()
+
+            val primaryItems = primaryResult?.items ?: emptyList()
+
+            if (primaryItems.isNotEmpty()) {
+                searchCandidates = primaryItems
+                break
+            }
+
+            // ✅ fallback (tanpa filter Song)
+            val fallbackResult = Innertube.searchPage(
+                body = SearchBody(query = q)
+            ) { content: it.vfsfitvnm.providers.innertube.models.MusicShelfRenderer.Content ->
+                content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
+            }?.getOrNull()
+
+            val fallbackItems = fallbackResult?.items ?: emptyList()
+
+            if (fallbackItems.isNotEmpty()) {
+                searchCandidates = fallbackItems
+                break
+            }
+        }
+
+        if (searchCandidates.isNullOrEmpty()) {
+            Log.w("PlaylistImporter", "No match found for ${song.title}")
+            return@async null
+        }
+
+        // ✅ cari lagu yang paling mirip
+        val match = findBestMatch(song, searchCandidates)
+        if (match == null) {
+            Log.w("PlaylistImporter", "❌ No close match for ${song.title}")
+            return@async null
+        }
+
+        // ✅ hasilnya dikonversi ke Song
+        Song(
+            id = match.info?.endpoint?.videoId ?: "",
+            title = match.info?.name ?: "",
+            artistsText = match.authors?.joinToString(", ") { it.name ?: "" } ?: "",
+            durationText = match.durationText,
+            thumbnailUrl = match.thumbnail?.url,
+            album = match.album?.name,
+            explicit = match.explicit
+        )
+    } catch (t: Throwable) {
+        Log.e("PlaylistImporter", "Error ${song.title}: ${t.message}")
+        null
+    }
                         }
-                    }
-
+                        
                     val results = deferred.awaitAll()
                     results.forEachIndexed { i, s ->
                         if (s != null && s.id.isNotBlank()) addedSongs.add(s)
