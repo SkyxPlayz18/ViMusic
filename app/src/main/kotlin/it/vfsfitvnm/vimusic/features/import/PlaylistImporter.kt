@@ -6,15 +6,13 @@ import it.vfsfitvnm.vimusic.models.Playlist
 import it.vfsfitvnm.vimusic.models.Song
 import it.vfsfitvnm.vimusic.transaction
 import it.vfsfitvnm.providers.innertube.Innertube
+import it.vfsfitvnm.providers.innertube.models.MusicShelfRenderer
 import it.vfsfitvnm.providers.innertube.models.bodies.SearchBody
 import it.vfsfitvnm.providers.innertube.requests.searchPage
-import it.vfsfitvnm.providers.innertube.models.MusicShelfRenderer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import kotlin.math.max
 import kotlin.math.min
 
@@ -59,78 +57,48 @@ class PlaylistImporter {
                 coroutineScope {
                     val deferred = batch.map { song ->
                         async(Dispatchers.IO) {
-    try {
-        val queries = listOf(
-            "${song.title} ${song.artist}",
-            "${song.title} ${song.album}",
-            song.title
-        )
+                            try {
+                                val query = buildQuery(song)
+                                Log.d("Importer", "Search query: $query")
 
-        var searchCandidates: List<Innertube.SongItem>? = null
-        var usedQuery: String? = null
+                                // 🔍 cari lagu dengan filter Song
+                                val result = Innertube.searchPage(
+                                    body = SearchBody(query = query, params = Innertube.SearchFilter.Song.value)
+                                ) { content: MusicShelfRenderer.Content ->
+                                    content.musicResponsiveListItemRenderer?.let { renderer ->
+                                        renderer.toSongItem()
+                                    }
+                                }?.getOrNull()
 
-        for (q in queries) {
-            if (q.isBlank()) continue
-            usedQuery = q
-            Log.d("PlaylistImporter", "Searching: \"$q\"")
+                                val items = result?.items?.filterIsInstance<Innertube.SongItem>() ?: emptyList()
 
-            // ✅ search utama (dengan filter Song)
-            val primaryResult = Innertube.searchPage(
-                body = SearchBody(query = q, params = Innertube.SearchFilter.Song.value)
-            ) { content: it.vfsfitvnm.providers.innertube.models.MusicShelfRenderer.Content ->
-                content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
-            }?.getOrNull()
+                                if (items.isEmpty()) {
+                                    Log.w("PlaylistImporter", "❌ No results for ${song.title}")
+                                    return@async null
+                                }
 
-            val primaryItems = primaryResult?.items ?: emptyList()
+                                val match = findBestMatch(song, items)
+                                if (match == null) {
+                                    Log.w("PlaylistImporter", "⚠️ No close match for ${song.title}")
+                                    return@async null
+                                }
 
-            if (primaryItems.isNotEmpty()) {
-                searchCandidates = primaryItems
-                break
-            }
-
-            // ✅ fallback (tanpa filter Song)
-            val fallbackResult = Innertube.searchPage(
-                body = SearchBody(query = q)
-            ) { content: it.vfsfitvnm.providers.innertube.models.MusicShelfRenderer.Content ->
-                content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
-            }?.getOrNull()
-
-            val fallbackItems = fallbackResult?.items ?: emptyList()
-
-            if (fallbackItems.isNotEmpty()) {
-                searchCandidates = fallbackItems
-                break
-            }
-        }
-
-        if (searchCandidates.isNullOrEmpty()) {
-            Log.w("PlaylistImporter", "No match found for ${song.title}")
-            return@async null
-        }
-
-        // ✅ cari lagu yang paling mirip
-        val match = findBestMatch(song, searchCandidates)
-        if (match == null) {
-            Log.w("PlaylistImporter", "❌ No close match for ${song.title}")
-            return@async null
-        }
-
-        // ✅ hasilnya dikonversi ke Song
-        Song(
-            id = match.info?.endpoint?.videoId ?: "",
-            title = match.info?.name ?: "",
-            artistsText = match.authors?.joinToString(", ") { it.name ?: "" } ?: "",
-            durationText = match.durationText,
-            thumbnailUrl = match.thumbnail?.url,
-            album = match.album?.name,
-            explicit = match.explicit
-        )
-    } catch (t: Throwable) {
-        Log.e("PlaylistImporter", "Error ${song.title}: ${t.message}")
-        null
-    }
+                                Song(
+                                    id = match.info?.endpoint?.videoId ?: "",
+                                    title = match.info?.name ?: "",
+                                    artistsText = match.authors?.joinToString(", ") { it.name ?: "" } ?: "",
+                                    durationText = match.durationText,
+                                    thumbnailUrl = match.thumbnail?.url,
+                                    album = match.album?.name,
+                                    explicit = match.explicit
+                                )
+                            } catch (t: Throwable) {
+                                Log.e("PlaylistImporter", "Error ${song.title}: ${t.message}")
+                                null
+                            }
                         }
-                        
+                    }
+
                     val results = deferred.awaitAll()
                     results.forEachIndexed { i, s ->
                         if (s != null && s.id.isNotBlank()) addedSongs.add(s)
@@ -147,7 +115,7 @@ class PlaylistImporter {
                     val playlist = Playlist(name = playlistName)
                     Database.instance.addMediaItemsToPlaylistAtTop(
                         playlist = playlist,
-                        mediaItems = addedSongs.map { it.toMediaItem() } // ✅ ganti ke helper
+                        mediaItems = addedSongs.map { it.asMediaItem }
                     )
                 }
             }
@@ -167,6 +135,9 @@ class PlaylistImporter {
         }
     }
 
+    // ======================
+    // 🔧 Matching logic
+    // ======================
     private fun buildQuery(song: SongImportInfo): String {
         return listOf(song.title, song.artist, song.album)
             .filterNotNull()
@@ -224,20 +195,24 @@ class PlaylistImporter {
         }
         return dp[b.length]
     }
-}
 
-/**
- * ✅ Helper extension: biar nggak error di `asMediaItem`
- */
-fun Song.toMediaItem(): MediaItem {
-    val metadata = MediaMetadata.Builder()
-        .setTitle(title)
-        .setArtist(artistsText)
-        .setAlbumTitle(album)
-        .build()
-
-    return MediaItem.Builder()
-        .setMediaId(id)
-        .setMediaMetadata(metadata)
-        .build()
+    // Tambahan extension supaya bisa convert renderer ke SongItem
+    private fun it.vfsfitvnm.providers.innertube.models.MusicResponsiveListItemRenderer.toSongItem(): Innertube.SongItem {
+        return Innertube.SongItem(
+            info = Innertube.Info(
+                name = flexColumns?.firstOrNull()?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()?.text,
+                endpoint = navigationEndpoint?.endpoint
+            ),
+            authors = fixedColumns?.mapNotNull {
+                it.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()?.let { run ->
+                    Innertube.Info(run)
+                }
+            },
+            album = null,
+            durationText = fixedColumns?.getOrNull(1)
+                ?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()?.text,
+            explicit = false,
+            thumbnail = thumbnail
+        )
+    }
 }
