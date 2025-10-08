@@ -4,6 +4,7 @@ import android.util.Log
 import it.vfsfitvnm.vimusic.Database
 import it.vfsfitvnm.vimusic.models.Playlist
 import it.vfsfitvnm.vimusic.models.Song
+import it.vfsfitvnm.vimusic.models.MediaItem
 import it.vfsfitvnm.vimusic.transaction
 import it.vfsfitvnm.providers.innertube.Innertube
 import it.vfsfitvnm.providers.innertube.models.MusicShelfRenderer
@@ -199,10 +200,11 @@ class PlaylistImporter {
     // Tambahan extension supaya bisa convert renderer ke SongItem
     private fun it.vfsfitvnm.providers.innertube.models.MusicResponsiveListItemRenderer.toSongItem(): Innertube.SongItem {
         return Innertube.SongItem(
-            info = Innertube.Info(
-                name = flexColumns?.firstOrNull()?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()?.text,
-                endpoint = navigationEndpoint?.endpoint
-            ),
+            info = Innertube.Info<NavigationEndpoint.Endpoint.Watch>(
+    name = flexColumns?.firstOrNull()
+        ?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()?.text,
+    endpoint = navigationEndpoint?.endpoint as? NavigationEndpoint.Endpoint.Watch
+),
             authors = fixedColumns?.mapNotNull {
                 it.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()?.let { run ->
                     Innertube.Info(run)
@@ -212,7 +214,18 @@ class PlaylistImporter {
             durationText = fixedColumns?.getOrNull(1)
                 ?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()?.text,
             explicit = false,
-            thumbnail = thumbnail
+            thumbnail = thumbnail?.thumbnails?.firstOrNull()
         )
     }
 }
+
+val Song.asMediaItem: MediaItem
+    get() = MediaItem(
+        id = id,
+        title = title,
+        artistsText = artistsText,
+        durationText = durationText,
+        thumbnailUrl = thumbnailUrl,
+        album = album,
+        explicit = explicit
+    )
