@@ -245,7 +245,7 @@ fun SyncSettings(
                             coroutineScope.launch {
                                 val importer = PlaylistImporter()
                                 importer.import(
-                                    songList = songList,
+                                    songs = songList,
                                     playlistName = playlistName,
                                     unknownErrorMessage = unknownErrorString,
                                     onProgressUpdate = { status -> importStatus = status }
