@@ -11,6 +11,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import kotlin.math.max
 import kotlin.math.min
 
@@ -62,9 +64,9 @@ class PlaylistImporter {
                                         query = query,
                                         params = Innertube.SearchFilter.Song.value
                                     )
-                                )
+                                ).getOrNull()  // ✅ unwrap dari Result
 
-                                val items = result?.getOrNull()?.items ?: emptyList()
+                                val items = result?.items ?: emptyList()  // ✅ fix unresolved reference
 
                                 val match = findBestMatch(song, items)
                                 if (match == null) {
@@ -104,7 +106,7 @@ class PlaylistImporter {
                     val playlist = Playlist(name = playlistName)
                     Database.instance.addMediaItemsToPlaylistAtTop(
                         playlist = playlist,
-                        mediaItems = addedSongs.map { it.asMediaItem }
+                        mediaItems = addedSongs.map { it.toMediaItem() } // ✅ ganti ke helper
                     )
                 }
             }
@@ -181,4 +183,20 @@ class PlaylistImporter {
         }
         return dp[b.length]
     }
+}
+
+/**
+ * ✅ Helper extension: biar nggak error di `asMediaItem`
+ */
+fun Song.toMediaItem(): MediaItem {
+    val metadata = MediaMetadata.Builder()
+        .setTitle(title)
+        .setArtist(artistsText)
+        .setAlbumTitle(album)
+        .build()
+
+    return MediaItem.Builder()
+        .setMediaId(id)
+        .setMediaMetadata(metadata)
+        .build()
 }
