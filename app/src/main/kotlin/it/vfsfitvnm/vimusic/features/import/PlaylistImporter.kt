@@ -1,13 +1,18 @@
 package it.vfsfitvnm.vimusic.features.import
 
+import android.net.Uri
 import android.util.Log
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import it.vfsfitvnm.vimusic.Database
 import it.vfsfitvnm.vimusic.models.Playlist
 import it.vfsfitvnm.vimusic.models.Song
-import it.vfsfitvnm.vimusic.models.MediaItem
 import it.vfsfitvnm.vimusic.transaction
 import it.vfsfitvnm.providers.innertube.Innertube
 import it.vfsfitvnm.providers.innertube.models.MusicShelfRenderer
+import it.vfsfitvnm.providers.innertube.models.NavigationEndpoint
+import it.vfsfitvnm.providers.innertube.models.Runs
+import it.vfsfitvnm.providers.innertube.models.Thumbnail
 import it.vfsfitvnm.providers.innertube.models.bodies.SearchBody
 import it.vfsfitvnm.providers.innertube.requests.searchPage
 import kotlinx.coroutines.Dispatchers
@@ -36,196 +41,395 @@ sealed class ImportStatus {
 }
 
 class PlaylistImporter {
+    private data class ProcessedSongInfo(
+        val baseTitle: String,
+        val primaryArtist: String,
+        val allArtists: List<String>,
+        val modifiers: Set<String>,
+        val album: String?
+    )
+
     companion object {
-        private const val MATCH_THRESHOLD = 60
+        // Sesuaikan threshold kalau mau lebih longgar/ketat
+        private const val MINIMUM_SCORE_THRESHOLD = 60
+        private const val PRIMARY_ARTIST_EXACT_MATCH_BONUS = 40
+        private const val OTHER_ARTIST_MATCH_BONUS = 10
+        private const val TITLE_SIMILARITY_WEIGHT = 50
+        private const val ALBUM_MATCH_BONUS = 30
+        private const val MODIFIER_MATCH_BONUS = 25
+        private const val MODIFIER_MISMATCH_PENALTY = 40
+        private val KNOWN_MODIFIERS = setOf(
+            "remix", "edit", "mix", "live", "cover", "instrumental", "karaoke",
+            "acoustic", "unplugged", "reverb", "slowed", "sped up", "chopped", "screwed",
+            "deluxe", "version", "edition", "ultra"
+        )
     }
 
     suspend fun import(
-        songs: List<SongImportInfo>,
+        songList: List<SongImportInfo>,
         playlistName: String,
         unknownErrorMessage: String,
         onProgressUpdate: (ImportStatus) -> Unit
     ) {
         try {
-            val total = songs.size
-            val addedSongs = mutableListOf<Song>()
-            val failed = mutableListOf<SongImportInfo>()
-            var processed = 0
+            val totalTracks = songList.size
+            val songsToAdd = mutableListOf<Song>()
+            val failedTracks = mutableListOf<SongImportInfo>()
+            var processedCount = 0
 
-            onProgressUpdate(ImportStatus.InProgress(0, total))
+            onProgressUpdate(ImportStatus.InProgress(processed = 0, total = totalTracks))
 
-            songs.chunked(10).forEach { batch ->
+            val batchSize = 10
+            songList.chunked(batchSize).forEach { batch ->
                 coroutineScope {
-                    val deferred = batch.map { song ->
+                    val deferred = batch.map { track ->
                         async(Dispatchers.IO) {
                             try {
-                                val query = buildQuery(song)
-                                Log.d("Importer", "Search query: $query")
+                                // cleanup query
+                                val cleanedQuery = track.title
+                                    .replace(Regex("\\(.*?\\)"), "")
+                                    .replace(Regex("\\[.*?\\]"), "")
+                                    .replace(Regex("(?i)\\b(official|lyrics|audio|video|feat\\.?|ft\\.?|remix|live)\\b"), "")
+                                    .replace(Regex("\\s+"), " ")
+                                    .trim()
 
-                                // 🔍 cari lagu dengan filter Song
-                                val result = Innertube.searchPage(
-                                    body = SearchBody(query = query, params = Innertube.SearchFilter.Song.value)
-                                ) { content: MusicShelfRenderer.Content ->
-                                    content.musicResponsiveListItemRenderer?.let { renderer ->
-                                        renderer.toSongItem()
+                                val queries = listOf(
+                                    "$cleanedQuery ${track.artist} ${track.album ?: ""}".trim(),
+                                    "$cleanedQuery ${track.artist}".trim(),
+                                    "${track.title} ${track.artist}".trim(),
+                                    "$cleanedQuery".trim(),
+                                    track.title.trim()
+                                ).filter { it.isNotBlank() }.distinct()
+
+                                var searchCandidates: List<Innertube.SongItem>? = null
+                                var usedQuery: String? = null
+
+                                // sequential fallbacks
+                                for (q in queries) {
+                                    usedQuery = q
+                                    Log.d("PlaylistImporter", "Searching: \"$q\"")
+
+                                    val res = Innertube.searchPage(
+                                        body = SearchBody(query = q, params = Innertube.SearchFilter.Song.value)
+                                    ) { content: MusicShelfRenderer.Content ->
+                                        // mapper: MusicShelfRenderer.Content -> Innertube.SongItem?
+                                        // Try to build SongItem from the content. Field names follow repo models.
+                                        content.musicResponsiveListItemRenderer?.let { mr ->
+                                            try {
+                                                // title run (first flex column)
+                                                val titleRun = mr.flexColumns
+                                                    ?.firstOrNull()
+                                                    ?.musicResponsiveListItemFlexColumnRenderer
+                                                    ?.text
+                                                    ?.runs
+                                                    ?.firstOrNull()
+
+                                                val info = titleRun?.let {
+                                                    // explicitly specify Watch endpoint type
+                                                    Innertube.Info<NavigationEndpoint.Endpoint.Watch>(it)
+                                                } ?: mr.navigationEndpoint?.endpoint?.let {
+                                                    // fallback: can't build Info from run, leave null
+                                                    null
+                                                }
+
+                                                // authors: try flex/fixed columns runs -> map to Browse infos
+                                                val authors = mr.flexColumns
+                                                    ?.mapNotNull { col ->
+                                                        col.musicResponsiveListItemFlexColumnRenderer
+                                                            ?.text
+                                                            ?.runs
+                                                            ?.firstOrNull()
+                                                            ?.let { run -> Innertube.Info<NavigationEndpoint.Endpoint.Browse>(run) }
+                                                    }
+                                                    ?: mr.fixedColumns
+                                                        ?.mapNotNull { col ->
+                                                            col.musicResponsiveListItemFlexColumnRenderer
+                                                                ?.text
+                                                                ?.runs
+                                                                ?.firstOrNull()
+                                                                ?.let { run -> Innertube.Info<NavigationEndpoint.Endpoint.Browse>(run) }
+                                                        }
+
+                                                // duration is often in fixedColumns[1]
+                                                val duration = mr.fixedColumns
+                                                    ?.getOrNull(1)
+                                                    ?.musicResponsiveListItemFlexColumnRenderer
+                                                    ?.text
+                                                    ?.runs
+                                                    ?.firstOrNull()
+                                                    ?.text
+
+                                                // thumbnail: try to pick first thumbnail object (model Thumbnail or ThumbnailRenderer)
+                                                val thumbnail: Thumbnail? = try {
+                                                    // many models put thumbnail under "thumbnail" -> "thumbnails"
+                                                    (mr.thumbnail?.thumbnails?.firstOrNull() as? Thumbnail)
+                                                } catch (_: Throwable) {
+                                                    null
+                                                }
+
+                                                Innertube.SongItem(
+                                                    info = info,
+                                                    authors = authors,
+                                                    album = null,
+                                                    durationText = duration,
+                                                    explicit = false,
+                                                    thumbnail = thumbnail
+                                                )
+                                            } catch (t: Throwable) {
+                                                // mapping failed for this content
+                                                null
+                                            }
+                                        }
+                                    }?.getOrNull()?.items
+
+                                    if (!res.isNullOrEmpty()) {
+                                        // filter to SongItem
+                                        searchCandidates = res.filterIsInstance<Innertube.SongItem>()
+                                        if (!searchCandidates.isNullOrEmpty()) break
                                     }
-                                }?.getOrNull()
 
-                                val items = result?.items?.filterIsInstance<Innertube.SongItem>() ?: emptyList()
+                                    // fallback: try without Song filter
+                                    val res2 = Innertube.searchPage(
+                                        body = SearchBody(query = q)
+                                    ) { content: MusicShelfRenderer.Content ->
+                                        content.musicResponsiveListItemRenderer?.let { mr ->
+                                            try {
+                                                val titleRun = mr.flexColumns
+                                                    ?.firstOrNull()
+                                                    ?.musicResponsiveListItemFlexColumnRenderer
+                                                    ?.text
+                                                    ?.runs
+                                                    ?.firstOrNull()
+                                                val info = titleRun?.let { Innertube.Info<NavigationEndpoint.Endpoint.Watch>(it) }
+                                                val authors = mr.flexColumns
+                                                    ?.mapNotNull { col ->
+                                                        col.musicResponsiveListItemFlexColumnRenderer
+                                                            ?.text
+                                                            ?.runs
+                                                            ?.firstOrNull()
+                                                            ?.let { run -> Innertube.Info<NavigationEndpoint.Endpoint.Browse>(run) }
+                                                    } ?: mr.fixedColumns
+                                                    ?.mapNotNull { col ->
+                                                        col.musicResponsiveListItemFlexColumnRenderer
+                                                            ?.text
+                                                            ?.runs
+                                                            ?.firstOrNull()
+                                                            ?.let { run -> Innertube.Info<NavigationEndpoint.Endpoint.Browse>(run) }
+                                                    }
+                                                val duration = mr.fixedColumns
+                                                    ?.getOrNull(1)
+                                                    ?.musicResponsiveListItemFlexColumnRenderer
+                                                    ?.text
+                                                    ?.runs
+                                                    ?.firstOrNull()
+                                                    ?.text
+                                                val thumbnail: Thumbnail? = try {
+                                                    (mr.thumbnail?.thumbnails?.firstOrNull() as? Thumbnail)
+                                                } catch (_: Throwable) {
+                                                    null
+                                                }
+                                                Innertube.SongItem(
+                                                    info = info,
+                                                    authors = authors,
+                                                    album = null,
+                                                    durationText = duration,
+                                                    explicit = false,
+                                                    thumbnail = thumbnail
+                                                )
+                                            } catch (t: Throwable) {
+                                                null
+                                            }
+                                        }
+                                    }?.getOrNull()?.items?.filterIsInstance<Innertube.SongItem>()
 
-                                if (items.isEmpty()) {
-                                    Log.w("PlaylistImporter", "❌ No results for ${song.title}")
+                                    if (!res2.isNullOrEmpty()) {
+                                        searchCandidates = res2
+                                        break
+                                    }
+                                }
+
+                                if (searchCandidates.isNullOrEmpty()) {
+                                    Log.w("PlaylistImporter", "No candidates for: ${track.title} — query used: $usedQuery")
                                     return@async null
                                 }
 
-                                val match = findBestMatch(song, items)
-                                if (match == null) {
-                                    Log.w("PlaylistImporter", "⚠️ No close match for ${song.title}")
+                                val bestMatch = findBestMatchInResults(track, searchCandidates)
+                                if (bestMatch == null) {
+                                    Log.w("PlaylistImporter", "No match above threshold for: ${track.title}")
                                     return@async null
                                 }
 
+                                // build Song model
+                                val artistsText = bestMatch.authors?.joinToString(", ") { it.name ?: "" } ?: ""
                                 Song(
-                                    id = match.info?.endpoint?.videoId ?: "",
-                                    title = match.info?.name ?: "",
-                                    artistsText = match.authors?.joinToString(", ") { it.name ?: "" } ?: "",
-                                    durationText = match.durationText,
-                                    thumbnailUrl = match.thumbnail?.url,
-                                    album = match.album?.name,
-                                    explicit = match.explicit
+                                    id = bestMatch.info?.endpoint?.videoId ?: "",
+                                    title = bestMatch.info?.name ?: "",
+                                    artistsText = artistsText,
+                                    durationText = bestMatch.durationText,
+                                    thumbnailUrl = bestMatch.thumbnail?.url,
+                                    album = bestMatch.album?.name,
+                                    explicit = bestMatch.explicit
                                 )
                             } catch (t: Throwable) {
-                                Log.e("PlaylistImporter", "Error ${song.title}: ${t.message}")
+                                Log.e("PlaylistImporter", "Error while processing ${track.title}: ${t.message}")
                                 null
                             }
                         }
                     }
 
                     val results = deferred.awaitAll()
-                    results.forEachIndexed { i, s ->
-                        if (s != null && s.id.isNotBlank()) addedSongs.add(s)
-                        else failed.add(batch[i])
+                    results.forEachIndexed { i, song ->
+                        if (song != null && song.id.isNotBlank()) songsToAdd.add(song)
+                        else failedTracks.add(batch[i])
                     }
                 }
 
-                processed += batch.size
-                onProgressUpdate(ImportStatus.InProgress(processed, total))
+                processedCount += batch.size
+                onProgressUpdate(ImportStatus.InProgress(processed = processedCount, total = totalTracks))
             }
 
-            if (addedSongs.isNotEmpty()) {
+            if (songsToAdd.isNotEmpty()) {
                 transaction {
-                    val playlist = Playlist(name = playlistName)
-                    Database.instance.addMediaItemsToPlaylistAtTop(
-                        playlist = playlist,
-                        mediaItems = addedSongs.map { it.asMediaItem }
-                    )
+                    // keep existing DB behaviour — insert playlist then add songs.
+                    val newPlaylist = Playlist(name = playlistName)
+                    val newPlaylistId = Database.instance.insert(newPlaylist)
+                    if (newPlaylistId != -1L) {
+                        songsToAdd.forEachIndexed { index, s ->
+                            Database.instance.upsert(s)
+                            Database.instance.insert(
+                                it.vfsfitvnm.vimusic.models.SongPlaylistMap(
+                                    songId = s.id,
+                                    playlistId = newPlaylistId,
+                                    position = index
+                                )
+                            )
+                        }
+                    }
                 }
             }
 
             onProgressUpdate(
                 ImportStatus.Complete(
-                    imported = addedSongs.size,
-                    failed = failed.size,
-                    total = total,
-                    failedTracks = failed
+                    imported = songsToAdd.size,
+                    failed = failedTracks.size,
+                    total = totalTracks,
+                    failedTracks = failedTracks
                 )
             )
 
         } catch (e: Exception) {
-            Log.e("PlaylistImporter", "Import failed: ${e.message}")
+            Log.e("PlaylistImporter", "An error occurred during the import process.", e)
             onProgressUpdate(ImportStatus.Error(e.message ?: unknownErrorMessage))
         }
     }
 
-    // ======================
-    // 🔧 Matching logic
-    // ======================
-    private fun buildQuery(song: SongImportInfo): String {
-        return listOf(song.title, song.artist, song.album)
-            .filterNotNull()
-            .joinToString(" ") { it.trim() }
-            .replace(Regex("\\(.*?\\)|\\[.*?\\]|official|lyrics|audio|video"), "")
-            .replace(Regex("\\s+"), " ")
-            .trim()
+    private fun findBestMatchInResults(importTrack: SongImportInfo, candidates: List<Innertube.SongItem>): Innertube.SongItem? {
+        val importInfo = parseSongInfo(importTrack.title, importTrack.artist, importTrack.album)
+
+        val scoredCandidates = candidates.map { candidate ->
+            val candidateTitle = candidate.info?.name ?: ""
+            val candidateArtists = candidate.authors?.joinToString { it.name.toString() } ?: ""
+            val candidateAlbum = candidate.album?.name
+            val candidateInfo = parseSongInfo(candidateTitle, candidateArtists, candidateAlbum)
+            val score = calculateMatchScore(importInfo, candidateInfo, candidateAlbum)
+            candidate to score
+        }
+
+        return scoredCandidates
+            .filter { (_, score) -> score > MINIMUM_SCORE_THRESHOLD }
+            .maxByOrNull { (_, score) -> score }
+            ?.first
     }
 
-    private fun findBestMatch(song: SongImportInfo, items: List<Innertube.SongItem>): Innertube.SongItem? {
-        var bestScore = 0
-        var best: Innertube.SongItem? = null
+    private fun parseSongInfo(title: String, artists: String, album: String?): ProcessedSongInfo {
+        val normalizedTitle = title.lowercase()
+        val modifierRegex = """[(\[].*?[)\]]|-.*""".toRegex()
+        val foundModifiers = modifierRegex.findAll(normalizedTitle)
+            .map { it.value.replace(Regex("[\\[\\]()\\-]"), "").trim() }
+            .flatMap { it.split(" ") }
+            .map { it.trim() }
+            .filter { word -> KNOWN_MODIFIERS.any { modifier -> word.contains(modifier) } }
+            .toSet()
 
-        for (item in items) {
-            val score = matchScore(song, item)
-            if (score > bestScore) {
-                bestScore = score
-                best = item
+        val baseTitle = modifierRegex.replace(normalizedTitle, "").trim()
+        val allArtists = artists.lowercase().split(Regex(",|&|feat\\.?|ft\\.?|with"))
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+        return ProcessedSongInfo(baseTitle, allArtists.firstOrNull() ?: "", allArtists, foundModifiers, album?.lowercase()?.trim())
+    }
+
+    private fun calculateMatchScore(importInfo: ProcessedSongInfo, candidateInfo: ProcessedSongInfo, candidateAlbumName: String?): Int {
+        var score = 0
+
+        if (importInfo.primaryArtist.isNotEmpty() && candidateInfo.allArtists.any { it.contains(importInfo.primaryArtist) }) {
+            score += PRIMARY_ARTIST_EXACT_MATCH_BONUS
+        }
+        val otherImportArtists = importInfo.allArtists.drop(1)
+        score += otherImportArtists.count { importArtist ->
+            candidateInfo.allArtists.any { candidateArtist -> candidateArtist.contains(importArtist) }
+        } * OTHER_ARTIST_MATCH_BONUS
+        if (score == 0) return 0
+
+        val titleDistance = levenshtein(importInfo.baseTitle, candidateInfo.baseTitle)
+        val maxLen = max(importInfo.baseTitle.length, candidateInfo.baseTitle.length)
+        if (maxLen > 0) {
+            score += ((1.0 - titleDistance.toDouble() / maxLen) * TITLE_SIMILARITY_WEIGHT).toInt()
+        }
+
+        importInfo.album?.let { importAlbum ->
+            candidateAlbumName?.lowercase()?.let { candidateAlbum ->
+                if (candidateAlbum.contains(importAlbum)) {
+                    score += ALBUM_MATCH_BONUS
+                }
             }
         }
 
-        return if (bestScore >= MATCH_THRESHOLD) best else null
-    }
-
-    private fun matchScore(song: SongImportInfo, item: Innertube.SongItem): Int {
-        var score = 0
-
-        val titleDist = levenshtein(song.title.lowercase(), item.info?.name?.lowercase() ?: "")
-        val artistDist = levenshtein(song.artist.lowercase(), item.authors?.joinToString(" ") { it.name?.lowercase().orEmpty() } ?: "")
-        val albumDist = levenshtein(song.album?.lowercase().orEmpty(), item.album?.name?.lowercase().orEmpty())
-
-        if (song.artist.isNotBlank() && artistDist < 5) score += 40
-        if (song.album != null && albumDist < 5) score += 20
-
-        val titleScore = ((1.0 - (titleDist.toDouble() / max(song.title.length, 1))) * 60).toInt()
-        score += titleScore
+        if (importInfo.modifiers.isNotEmpty() && importInfo.modifiers == candidateInfo.modifiers) {
+            score += MODIFIER_MATCH_BONUS * importInfo.modifiers.size
+        } else if (importInfo.modifiers.isEmpty() && candidateInfo.modifiers.isNotEmpty()) {
+            score -= MODIFIER_MISMATCH_PENALTY
+        } else if (importInfo.modifiers.isNotEmpty() && candidateInfo.modifiers.isEmpty()) {
+            score -= MODIFIER_MISMATCH_PENALTY / 2
+        }
 
         return score
     }
 
-    private fun levenshtein(a: String, b: String): Int {
-        val dp = IntArray(b.length + 1) { it }
-        for (i in 1..a.length) {
-            var prev = i - 1
-            dp[0] = i
-            for (j in 1..b.length) {
-                val temp = dp[j]
-                val cost = if (a[i - 1] == b[j - 1]) 0 else 1
-                dp[j] = min(
-                    min(dp[j - 1] + 1, dp[j] + 1),
-                    prev + cost
-                )
-                prev = temp
-            }
-        }
-        return dp[b.length]
-    }
+    private fun levenshtein(lhs: CharSequence, rhs: CharSequence): Int {
+        val lhsLength = lhs.length
+        val rhsLength = rhs.length
+        var cost = IntArray(lhsLength + 1) { it }
+        var newCost = IntArray(lhsLength + 1)
 
-    // Tambahan extension supaya bisa convert renderer ke SongItem
-    private fun it.vfsfitvnm.providers.innertube.models.MusicResponsiveListItemRenderer.toSongItem(): Innertube.SongItem {
-        return Innertube.SongItem(
-            info = Innertube.Info<NavigationEndpoint.Endpoint.Watch>(
-    name = flexColumns?.firstOrNull()
-        ?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()?.text,
-    endpoint = navigationEndpoint?.endpoint as? NavigationEndpoint.Endpoint.Watch
-),
-            authors = fixedColumns?.mapNotNull {
-                it.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()?.let { run ->
-                    Innertube.Info(run)
-                }
-            },
-            album = null,
-            durationText = fixedColumns?.getOrNull(1)
-                ?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()?.text,
-            explicit = false,
-            thumbnail = thumbnail?.thumbnails?.firstOrNull()
-        )
+        for (i in 1..rhsLength) {
+            newCost[0] = i
+            for (j in 1..lhsLength) {
+                val match = if (lhs[j - 1] == rhs[i - 1]) 0 else 1
+                val costReplace = cost[j - 1] + match
+                val costInsert = cost[j] + 1
+                val costDelete = newCost[j - 1] + 1
+                newCost[j] = min(min(costInsert, costDelete), costReplace)
+            }
+            val swap = cost
+            cost = newCost
+            newCost = swap
+        }
+        return cost[lhsLength]
     }
 }
 
+// ---------------------------
+// Extension: convert Song -> MediaItem
+// letakkan **di luar** class (akhir file)
 val Song.asMediaItem: MediaItem
-    get() = MediaItem(
-        id = id,
-        title = title,
-        artistsText = artistsText,
-        durationText = durationText,
-        thumbnailUrl = thumbnailUrl,
-        album = album,
-        explicit = explicit
-    )
+    get() = MediaItem.Builder()
+        .setMediaId(this.id)
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(this.title)
+                .setArtist(this.artistsText)
+                .setArtworkUri(this.thumbnailUrl?.let { Uri.parse(it) })
+                .build()
+        )
+        .build()
