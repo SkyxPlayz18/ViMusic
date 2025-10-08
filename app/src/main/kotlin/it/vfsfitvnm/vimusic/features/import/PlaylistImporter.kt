@@ -66,7 +66,7 @@ class PlaylistImporter {
     }
 
     suspend fun import(
-        songList: List<SongImportInfo>,
+        songs: List<SongImportInfo>,
         playlistName: String,
         unknownErrorMessage: String,
         onProgressUpdate: (ImportStatus) -> Unit
