@@ -7,6 +7,8 @@ import it.vfsfitvnm.vimusic.models.Song
 import it.vfsfitvnm.vimusic.transaction
 import it.vfsfitvnm.providers.innertube.Innertube
 import it.vfsfitvnm.providers.innertube.models.bodies.SearchBody
+import it.vfsfitvnm.providers.innertube.requests.searchPage
+import it.vfsfitvnm.providers.innertube.models.MusicShelfRenderer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
