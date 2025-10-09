@@ -317,20 +317,42 @@ class PlaylistImporter {
         return calculateMatchScore(importInfo, candInfo, candidate.album?.name)
     }
 
-    private fun findBestMatchInResults(importTrack: SongImportInfo, candidates: List<Innertube.SongItem>): Innertube.SongItem? {
-        val importInfo = parseSongInfo(importTrack.title, importTrack.artist, importTrack.album)
+    private fun findBestMatchInResults(
+    importTrack: SongImportInfo,
+    candidates: List<Innertube.SongItem>
+): Innertube.SongItem? {
+    val importInfo = parseSongInfo(importTrack.title, importTrack.artist, importTrack.album)
 
-        val scoredCandidates = filteredCandidates.map { candidate ->
-            val candidateTitle = normalize(candidate.info?.name ?: "")
-            val candidateArtists = candidate.authors?.joinToString(" ") { it.name ?: "" } ?: ""
-            val candidateAlbum = candidate.album?.name
-            val candidateInfo = parseSongInfo(candidateTitle, candidateArtists, candidateAlbum)
-            val score = calculateMatchScore(importInfo, candidateInfo, candidateAlbum)
+    // 🟩 Tambahin kode ini di sini (Langkah 2)
+    // Filter kandidat yang mengandung kata kunci versi tidak diinginkan
+    val filteredCandidates = candidates.filter { candidate ->
+        val text = listOfNotNull(
+            candidate.info?.name,
+            candidate.album?.name,
+            candidate.authors?.joinToString { it.name ?: "" }
+        ).joinToString(" ").lowercase()
 
-            // extra: if title exactly equals (after normalize) give big bonus
-            val exactTitle = if (normalize(importTrack.title) == candidateTitle) EXACT_TITLE_BONUS else 0
-            (candidate to (score + exactTitle))
-        }
+        val blacklist = listOf(
+            "live", "cover", "remix", "slowed", "sped up",
+            "reverb", "nightcore", "instrumental", "karaoke",
+            "japanese", "japan ver", "ver.", "versi jepang"
+        )
+
+        blacklist.none { bad -> bad in text }
+    }
+
+    // 🟨 lalu ubah baris ini:
+    val scoredCandidates = filteredCandidates.map { candidate ->
+        val candidateTitle = normalize(candidate.info?.name ?: "")
+        val candidateArtists = candidate.authors?.joinToString(" ") { it.name ?: "" } ?: ""
+        val candidateAlbum = candidate.album?.name
+        val candidateInfo = parseSongInfo(candidateTitle, candidateArtists, candidateAlbum)
+        val score = calculateMatchScore(importInfo, candidateInfo, candidateAlbum)
+
+        // extra: if title exactly equals (after normalize) give big bonus
+        val exactTitle = if (normalize(importTrack.title) == candidateTitle) EXACT_TITLE_BONUS else 0
+        (candidate to (score + exactTitle))
+    }
 
         val bestPair = scored.maxByOrNull { it.second } ?: return null
         val best = bestPair.first
