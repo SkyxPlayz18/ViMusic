@@ -1,12 +1,12 @@
 package it.vfsfitvnm.vimusic.features.import
 
-import android.util.Log
 import java.io.InputStream
 import kotlin.math.max
 
 class CsvPlaylistParser {
 
     companion object {
+        // Regex ini biar tanda koma dalam tanda kutip gak ikut kepotong
         private const val CSV_SPLIT_REGEX = ",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"
         private val csvSplitter = CSV_SPLIT_REGEX.toRegex()
     }
@@ -21,36 +21,27 @@ class CsvPlaylistParser {
         inputStream: InputStream,
         titleColumnIndex: Int,
         artistColumnIndex: Int,
-        albumColumnIndex: Int? // Optional album column index
+        albumColumnIndex: Int? // kolom album opsional
     ): List<SongImportInfo> {
         val songList = mutableListOf<SongImportInfo>()
 
         inputStream.bufferedReader().useLines { lines ->
-            val dataLines = lines.drop(1) // Assuming header is always present
+            val dataLines = lines.drop(1) // baris pertama = header
 
-            dataLines.forEachIndexed { index, line ->
-                if (line.isBlank()) return@forEachIndexed
+            dataLines.forEach { line ->
+                if (line.isBlank()) return@forEach
 
                 val columns = line.splitCsvLine()
+                val title = columns.getOrNull(titleColumnIndex)?.trim().orEmpty()
+                val artist = columns.getOrNull(artistColumnIndex)?.trim().orEmpty()
+                val album = albumColumnIndex?.let { columns.getOrNull(it)?.takeIf { it.isNotBlank() } }
 
-                try {
-                    val title = columns[titleColumnIndex]
-                    val artist = columns[artistColumnIndex]
-                    val album = albumColumnIndex?.let {
-                        if (columns.size > it) columns[it].takeIf(String::isNotBlank) else null
-                    }
-
-                    if (title.isNotBlank() && artist.isNotBlank()) {
-                        songList.add(SongImportInfo(title = title, artist = artist, album = album))
-                    } else {
-                        Log.w("CsvPlaylistParser", "Skipping row ${index + 2} due to blank title or artist.")
-                    }
-                } catch (_: IndexOutOfBoundsException) {
-                    val maxIndex = max(titleColumnIndex, artistColumnIndex)
-                    Log.w("CsvPlaylistParser", "Skipping malformed CSV row ${index + 2}. Expected at least ${maxIndex + 1} columns, but found ${columns.size}.")
+                if (title.isNotEmpty() && artist.isNotEmpty()) {
+                    songList.add(SongImportInfo(title = title, artist = artist, album = album))
                 }
             }
         }
+
         return songList
     }
 
