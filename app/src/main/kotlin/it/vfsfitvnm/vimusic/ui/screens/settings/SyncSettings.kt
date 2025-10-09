@@ -106,35 +106,55 @@ fun SyncSettings(
             Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
                 Text("Map CSV Columns", style = typography.m.semiBold, color = colorPalette.text)
 
-                fun ColumnSelector(label: String, selectedIndex: Int?, onSelect: (Int?) -> Unit, allowNone: Boolean = false) {
-                    var expanded by remember { mutableStateOf(false) }
-                    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                        TextField(
-                            readOnly = true,
-                            value = selectedIndex?.let { header.getOrNull(it) } ?: if (allowNone) "None" else "",
-                            onValueChange = {},
-                            label = { Text(label) },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                focusedIndicatorColor = colorPalette.accent,
-                                unfocusedIndicatorColor = colorPalette.textDisabled
-                            ),
-                            modifier = Modifier.menuAnchor().fillMaxWidth()
-                        )
-                        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            if (allowNone) DropdownMenuItem(text = { Text("None", color = colorPalette.text) }, onClick = {
-                                onSelect(null); expanded = false
-                            })
-                            header.forEachIndexed { i, name ->
-                                DropdownMenuItem(text = { Text(name, color = colorPalette.text) }, onClick = {
-                                    onSelect(i); expanded = false
-                                })
-                            }
-                        }
+                @Composable
+fun ColumnSelector(
+    label: String,
+    selectedIndex: Int?,
+    onSelect: (Int?) -> Unit,
+    allowNone: Boolean = false,
+    header: List<String> = emptyList() // tambahin ini biar gak undefined
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        TextField(
+            readOnly = true,
+            value = selectedIndex?.let { header.getOrNull(it) } ?: if (allowNone) "None" else "",
+            onValueChange = {},
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedIndicatorColor = colorPalette.accent,
+                unfocusedIndicatorColor = colorPalette.textDisabled
+            ),
+            modifier = Modifier.menuAnchor().fillMaxWidth()
+        )
+
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (allowNone) {
+                DropdownMenuItem(
+                    text = { Text("None", color = colorPalette.text) },
+                    onClick = {
+                        onSelect(null)
+                        expanded = false
                     }
-                }
+                )
+            }
+
+            header.forEachIndexed { i, name ->
+                DropdownMenuItem(
+                    text = { Text(name, color = colorPalette.text) },
+                    onClick = {
+                        onSelect(i)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
 
                 Spacer(Modifier.height(8.dp))
                 ColumnSelector("Track Name Column", titleColumnIndex) { titleColumnIndex = it ?: 0 }
