@@ -355,6 +355,10 @@ class PlaylistImporter {
             score += PRIMARY_ARTIST_EXACT_MATCH_BONUS
         }
 
+        else if (candidateInfo.allArtists.none { it.contains(importInfo.primaryArtist.take(4)) }) {
+    score -= 50 // penalti besar kalau artis beda jauh
+        }
+
         // other artists
         score += importInfo.allArtists.drop(1).count { importArtist ->
             candidateInfo.allArtists.any { candidateArtist -> candidateArtist.contains(importArtist) }
