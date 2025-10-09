@@ -320,7 +320,7 @@ class PlaylistImporter {
     private fun findBestMatchInResults(importTrack: SongImportInfo, candidates: List<Innertube.SongItem>): Innertube.SongItem? {
         val importInfo = parseSongInfo(importTrack.title, importTrack.artist, importTrack.album)
 
-        val scored = candidates.map { candidate ->
+        val scoredCandidates = filteredCandidates.map { candidate ->
             val candidateTitle = normalize(candidate.info?.name ?: "")
             val candidateArtists = candidate.authors?.joinToString(" ") { it.name ?: "" } ?: ""
             val candidateAlbum = candidate.album?.name
