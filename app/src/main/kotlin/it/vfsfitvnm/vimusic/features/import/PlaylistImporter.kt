@@ -259,15 +259,7 @@ class PlaylistImporter {
         }
     }
 
-    // ---------- Matching helpers ----------
-
-    private fun normalize(input: String?): String {
-        if (input.isNullOrBlank()) return ""
-        val n = Normalizer.normalize(input, Normalizer.Form.NFKC)
-        // remove combining marks (keeps CJK intact)
-        val noDiacritics = n.replace(Regex("\\p{M}"), "")
-        return noDiacritics.trim().lowercase()
-    }
+    // ---------- Matching helper ---------
 
     private fun normalizeForQuery(input: String?): String {
         return normalize(input)
