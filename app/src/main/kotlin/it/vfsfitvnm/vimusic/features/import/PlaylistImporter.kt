@@ -309,61 +309,52 @@ class PlaylistImporter {
         return calculateMatchScore(importInfo, candInfo, candidate.album?.name)
     }
 
-    private fun findBestMatchInResults(
-    importTrack: SongImportInfo,
-    candidates: List<Innertube.SongItem>
-): Innertube.SongItem? {
+    private fun findBestMatchInResults(importTrack: SongImportInfo, candidates: List<Innertube.SongItem>): Innertube.SongItem? {
     val importInfo = parseSongInfo(importTrack.title, importTrack.artist, importTrack.album)
 
-    // 🟩 Filter kandidat yang mengandung kata kunci versi tidak diinginkan
+    // Filter hasil biar gak ambil versi "live", "remix", "sped up", dll
     val filteredCandidates = candidates.filter { candidate ->
-        val text = listOfNotNull(
-            candidate.info?.name,
-            candidate.album?.name,
-            candidate.authors?.joinToString { it.name ?: "" }
-        ).joinToString(" ").lowercase()
+        val title = normalize(candidate.info?.name ?: "")
+        val album = normalize(candidate.album?.name ?: "")
+        val blockedWords = listOf("live", "remix", "sped up", "slowed", "cover", "version", "edit", "instrumental")
 
-        val blacklist = listOf(
-            "live", "cover", "remix", "slowed", "sped up",
-            "reverb", "nightcore", "instrumental", "karaoke",
-            "japanese", "japan ver", "ver.", "versi jepang"
-        )
-
-        blacklist.none { bad -> bad in text }
+        // Kalau CSV tidak menyebut "live"/"remix" dan judul hasil mengandung itu → skip
+        val csvHasModifier = blockedWords.any { normalize(importTrack.title).contains(it) }
+        val containsBlocked = blockedWords.any { title.contains(it) || album.contains(it) }
+        !containsBlocked || csvHasModifier
     }
 
-    // 🟨 Hitung skor tiap kandidat
-    val scoredCandidates = filteredCandidates.map { candidate ->
+    if (filteredCandidates.isEmpty()) return null
+
+    val scored = filteredCandidates.map { candidate ->
         val candidateTitle = normalize(candidate.info?.name ?: "")
-        val candidateArtists = candidate.authors?.joinToString(" ") { it.name ?: "" } ?: ""
-        val candidateAlbum = candidate.album?.name
+        val candidateArtists = candidate.authors?.joinToString(" ") { normalize(it.name ?: "") } ?: ""
+        val candidateAlbum = normalize(candidate.album?.name ?: "")
         val candidateInfo = parseSongInfo(candidateTitle, candidateArtists, candidateAlbum)
-        val score = calculateMatchScore(importInfo, candidateInfo, candidateAlbum)
 
-        // Tambah bonus besar kalau judulnya bener-bener sama (setelah normalisasi)
-        val exactTitle = if (normalize(importTrack.title) == candidateTitle) 50 else 0
+        var score = calculateMatchScore(importInfo, candidateInfo, candidateAlbum)
 
-        candidate to (score + exactTitle)
+        // Bonus kalau judul sama persis
+        if (normalize(importTrack.title) == candidateTitle) score += 50
+
+        // Bonus kalau artis sama persis
+        if (normalize(importTrack.artist) == candidateArtists) score += 40
+
+        // Bonus kalau album cocok banget
+        if (!importInfo.album.isNullOrEmpty() && candidateAlbum.contains(importInfo.album!!)) score += 30
+
+        candidate to score
     }
 
-    // 🟦 Ambil kandidat dengan skor tertinggi
-    val bestPair = scoredCandidates.maxByOrNull { it.second } ?: return null
+    val bestPair = scored.maxByOrNull { it.second } ?: return null
     val best = bestPair.first
     val bestScore = bestPair.second
 
-    // 🟨 Kalau masih di bawah threshold, anggap gagal
-    if (bestScore < 60) return null
-
-    // Tambahan debug check — memastikan hasil beneran cocok
-    val exactTitleMatch = normalize(importTrack.title) == normalize(best.info?.name ?: "")
-    if (exactTitleMatch) {
-        Log.d("PlaylistImporter", "✅ Exact match found for ${importTrack.title}")
-    } else {
-        Log.d("PlaylistImporter", "⚠️ Closest match: ${best.info?.name} (score=$bestScore)")
-    }
+    // Debug info (buat jaga-jaga, bisa dihapus kalau gak mau)
+    Log.d("PlaylistImporter", "Best match for ${importTrack.title}: ${best.info?.name} (score=$bestScore)")
 
     return best
-}
+    }
 
 // Fungsi bantu buat normalisasi teks (biar perbandingan lebih akurat)
 private fun normalize(input: String?): String {
