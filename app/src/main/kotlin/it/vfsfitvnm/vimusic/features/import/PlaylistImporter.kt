@@ -323,8 +323,7 @@ class PlaylistImporter {
 ): Innertube.SongItem? {
     val importInfo = parseSongInfo(importTrack.title, importTrack.artist, importTrack.album)
 
-    // 🟩 Tambahin kode ini di sini (Langkah 2)
-    // Filter kandidat yang mengandung kata kunci versi tidak diinginkan
+    // 🟩 Filter kandidat yang mengandung kata kunci versi tidak diinginkan
     val filteredCandidates = candidates.filter { candidate ->
         val text = listOfNotNull(
             candidate.info?.name,
@@ -341,7 +340,7 @@ class PlaylistImporter {
         blacklist.none { bad -> bad in text }
     }
 
-    // 🟨 lalu ubah baris ini:
+    // 🟨 Hitung skor tiap kandidat
     val scoredCandidates = filteredCandidates.map { candidate ->
         val candidateTitle = normalize(candidate.info?.name ?: "")
         val candidateArtists = candidate.authors?.joinToString(" ") { it.name ?: "" } ?: ""
@@ -349,25 +348,37 @@ class PlaylistImporter {
         val candidateInfo = parseSongInfo(candidateTitle, candidateArtists, candidateAlbum)
         val score = calculateMatchScore(importInfo, candidateInfo, candidateAlbum)
 
-        // extra: if title exactly equals (after normalize) give big bonus
-        val exactTitle = if (normalize(importTrack.title) == candidateTitle) EXACT_TITLE_BONUS else 0
-        (candidate to (score + exactTitle))
+        // Tambah bonus besar kalau judulnya bener-bener sama (setelah normalisasi)
+        val exactTitle = if (normalize(importTrack.title) == candidateTitle) 50 else 0
+
+        candidate to (score + exactTitle)
     }
 
-        val bestPair = scored.maxByOrNull { it.second } ?: return null
-        val best = bestPair.first
-        val bestScore = bestPair.second
+    // 🟦 Ambil kandidat dengan skor tertinggi
+    val bestPair = scoredCandidates.maxByOrNull { it.second } ?: return null
+    val best = bestPair.first
+    val bestScore = bestPair.second
 
-        // Acceptance rules:
-        // - exact normalized title OR score >= threshold => accept
-        // - else reject
-        val exactTitleMatch = normalize(importTrack.title) == normalize(best.info?.name ?: "")
-        if (exactTitleMatch) return best
-        if (bestScore >= MINIMUM_SCORE_THRESHOLD) return best
+    // 🟨 Kalau masih di bawah threshold, anggap gagal
+    if (bestScore < 60) return null
 
-        // otherwise reject
-        return null
+    // Tambahan debug check — memastikan hasil beneran cocok
+    val exactTitleMatch = normalize(importTrack.title) == normalize(best.info?.name ?: "")
+    if (exactTitleMatch) {
+        Log.d("PlaylistImporter", "✅ Exact match found for ${importTrack.title}")
+    } else {
+        Log.d("PlaylistImporter", "⚠️ Closest match: ${best.info?.name} (score=$bestScore)")
     }
+
+    return best
+}
+
+// Fungsi bantu buat normalisasi teks (biar perbandingan lebih akurat)
+private fun normalize(input: String): String =
+    input.lowercase()
+        .replace(Regex("[^a-z0-9 ]"), "")
+        .replace(Regex("\\s+"), " ")
+        .trim()
 
     private fun calculateMatchScore(importInfo: ProcessedSongInfo, candidateInfo: ProcessedSongInfo, candidateAlbumName: String?): Int {
         var score = 0
