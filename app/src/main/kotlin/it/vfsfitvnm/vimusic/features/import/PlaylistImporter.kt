@@ -366,11 +366,14 @@ class PlaylistImporter {
 }
 
 // Fungsi bantu buat normalisasi teks (biar perbandingan lebih akurat)
-private fun normalize(input: String): String =
-    input.lowercase()
-        .replace(Regex("[^a-z0-9 ]"), "")
-        .replace(Regex("\\s+"), " ")
-        .trim()
+private fun normalize(input: String?): String {
+    return input
+        ?.lowercase()
+        ?.replace(Regex("[^a-z0-9 ]"), "")
+        ?.replace(Regex("\\s+"), " ")
+        ?.trim()
+        ?: ""
+}
 
     private fun calculateMatchScore(importInfo: ProcessedSongInfo, candidateInfo: ProcessedSongInfo, candidateAlbumName: String?): Int {
         var score = 0
