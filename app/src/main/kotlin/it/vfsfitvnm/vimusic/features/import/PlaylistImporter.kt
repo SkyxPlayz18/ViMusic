@@ -107,6 +107,12 @@ class PlaylistImporter {
                         }
                     }
 
+                    batch.forEachIndexed { index, song ->
+    deferredSongsInBatch.add(async {
+        importSong(song, playlistId.toLong(), index)
+    })
+                    }
+
                     val results = deferredSongsInBatch.awaitAll()
                     batch.zip(results).forEach { (originalTrack, result) ->
                         if (result != null) {
