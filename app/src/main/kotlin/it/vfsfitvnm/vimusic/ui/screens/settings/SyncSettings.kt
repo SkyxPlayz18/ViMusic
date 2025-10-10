@@ -125,7 +125,8 @@ showingColumnMappingDialog?.let { (uri, header) ->
         ) {
             Text("Pilih Kolom CSV", style = typography.m.semiBold, color = colorPalette.text)
 
-            fun ColumnSelector(label: String, value: Int?, onSelect: (Int?) -> Unit, allowNone: Boolean = false) {
+            @Composable
+fun ColumnSelector(label: String, value: Int?, onSelect: (Int?) -> Unit, allowNone: Boolean = false) {
                 var expanded by remember { mutableStateOf(false) }
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                     TextField(
@@ -157,8 +158,17 @@ showingColumnMappingDialog?.let { (uri, header) ->
                 }
             }
 
-            ColumnSelector("Track Name Column", titleColumnIndex) { titleColumnIndex = it ?: 0 }
-            ColumnSelector("Artist Name Column", artistColumnIndex) { artistColumnIndex = it ?: 1 }
+            ColumnSelector(
+    label = "Track Name Column",
+    value = titleColumnIndex,
+    onSelect = { titleColumnIndex = it ?: 0 }
+)
+
+ColumnSelector(
+    label = "Artist Name Column",
+    value = artistColumnIndex,
+    onSelect = { artistColumnIndex = it ?: 1 }
+)
             ColumnSelector("Album Name Column (optional)", albumColumnIndex, { albumColumnIndex = it }, allowNone = true)
 
             Spacer(modifier = Modifier.height(8.dp))
