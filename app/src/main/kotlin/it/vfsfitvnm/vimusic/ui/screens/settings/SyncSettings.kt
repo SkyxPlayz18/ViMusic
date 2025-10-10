@@ -107,166 +107,120 @@ fun SyncSettings(
         }
     }
 
-    // CSV Dialog 1: Column Mapping
-    showingColumnMappingDialog?.let { (uri, header) ->
-        val smartTitleIndex = remember(header) { header.indexOfFirst { it.contains("name", ignoreCase = true) || it.contains("title", ignoreCase = true) }.coerceAtLeast(0) }
-        val smartArtistIndex = remember(header) { header.indexOfFirst { it.contains("artist", ignoreCase = true) }.coerceAtLeast(if (smartTitleIndex == 1) 0 else 1) }
-        val smartAlbumIndex = remember(header) { header.indexOfFirst { it.contains("album", ignoreCase = true) }.let { if (it == -1) null else it } }
+    
+                // CSV Dialog 1: Column Mapping
+showingColumnMappingDialog?.let { (uri, header) ->
+    val smartTitleIndex = remember(header) { header.indexOfFirst { it.contains("name", true) || it.contains("title", true) }.coerceAtLeast(0) }
+    val smartArtistIndex = remember(header) { header.indexOfFirst { it.contains("artist", true) }.coerceAtLeast(1) }
+    val smartAlbumIndex = remember(header) { header.indexOfFirst { it.contains("album", true) }.let { if (it == -1) null else it } }
 
-        var titleColumnIndex by remember { mutableStateOf(smartTitleIndex) }
-        var artistColumnIndex by remember { mutableStateOf(smartArtistIndex) }
-        var albumColumnIndex by remember { mutableStateOf(smartAlbumIndex) }
+    var titleColumnIndex by remember { mutableStateOf(smartTitleIndex) }
+    var artistColumnIndex by remember { mutableStateOf(smartArtistIndex) }
+    var albumColumnIndex by remember { mutableStateOf(smartAlbumIndex) }
 
-        var isTitleExpanded by remember { mutableStateOf(false) }
-        var isArtistExpanded by remember { mutableStateOf(false) }
-        var isAlbumExpanded by remember { mutableStateOf(false) }
+    DefaultDialog(onDismiss = { showingColumnMappingDialog = null }) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(all = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text("Pilih Kolom CSV", style = typography.m.semiBold, color = colorPalette.text)
 
-        DefaultDialog(onDismiss = { showingColumnMappingDialog = null }) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(all = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Text(text = stringResource(R.string.map_csv_columns), style = typography.m.semiBold, color = colorPalette.text)
-
-                ExposedDropdownMenuBox(expanded = isTitleExpanded, onExpandedChange = { isTitleExpanded = it }) {
+            fun ColumnSelector(label: String, value: Int?, onSelect: (Int?) -> Unit, allowNone: Boolean = false) {
+                var expanded by remember { mutableStateOf(false) }
+                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                     TextField(
-                        readOnly = true, value = header.getOrElse(titleColumnIndex) { "" }, onValueChange = {},
-                        label = { Text(stringResource(R.string.song_title_column)) },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isTitleExpanded) },
+                        readOnly = true,
+                        value = value?.let { header.getOrNull(it) } ?: if (allowNone) "None" else "",
+                        onValueChange = {},
+                        label = { Text(label) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
                         colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, disabledContainerColor = Color.Transparent,
-                            focusedIndicatorColor = colorPalette.accent, unfocusedIndicatorColor = colorPalette.textDisabled,
-                            focusedLabelColor = colorPalette.accent, unfocusedLabelColor = colorPalette.textSecondary,
-                            focusedTextColor = colorPalette.text, unfocusedTextColor = colorPalette.text,
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = colorPalette.accent,
+                            unfocusedIndicatorColor = colorPalette.textDisabled
                         ),
                         modifier = Modifier.menuAnchor().fillMaxWidth()
                     )
-                    ExposedDropdownMenu(expanded = isTitleExpanded, onDismissRequest = { isTitleExpanded = false }, modifier = Modifier.background(colorPalette.background2)) {
-                        header.forEachIndexed { index, column ->
-                            DropdownMenuItem(text = { Text(column, color = colorPalette.text) }, onClick = {
-                                titleColumnIndex = index
-                                isTitleExpanded = false
+                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        if (allowNone) {
+                            DropdownMenuItem(text = { Text("None", color = colorPalette.text) }, onClick = {
+                                onSelect(null); expanded = false
+                            })
+                        }
+                        header.forEachIndexed { i, name ->
+                            DropdownMenuItem(text = { Text(name, color = colorPalette.text) }, onClick = {
+                                onSelect(i); expanded = false
                             })
                         }
                     }
                 }
+            }
 
-                ExposedDropdownMenuBox(expanded = isArtistExpanded, onExpandedChange = { isArtistExpanded = it }) {
-                    TextField(
-                        readOnly = true, value = header.getOrElse(artistColumnIndex) { "" }, onValueChange = {},
-                        label = { Text(stringResource(R.string.artist_name_column)) },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isArtistExpanded) },
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, disabledContainerColor = Color.Transparent,
-                            focusedIndicatorColor = colorPalette.accent, unfocusedIndicatorColor = colorPalette.textDisabled,
-                            focusedLabelColor = colorPalette.accent, unfocusedLabelColor = colorPalette.textSecondary,
-                            focusedTextColor = colorPalette.text, unfocusedTextColor = colorPalette.text,
-                        ),
-                        modifier = Modifier.menuAnchor().fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(expanded = isArtistExpanded, onDismissRequest = { isArtistExpanded = false }, modifier = Modifier.background(colorPalette.background2)) {
-                        header.forEachIndexed { index, column ->
-                            DropdownMenuItem(text = { Text(column, color = colorPalette.text) }, onClick = {
-                                artistColumnIndex = index
-                                isArtistExpanded = false
-                            })
-                        }
-                    }
-                }
+            ColumnSelector("Track Name Column", titleColumnIndex) { titleColumnIndex = it ?: 0 }
+            ColumnSelector("Artist Name Column", artistColumnIndex) { artistColumnIndex = it ?: 1 }
+            ColumnSelector("Album Name Column (optional)", albumColumnIndex, { albumColumnIndex = it }, allowNone = true)
 
-                // New dropdown for Album Column (Optional)
-                ExposedDropdownMenuBox(expanded = isAlbumExpanded, onExpandedChange = { isAlbumExpanded = it }) {
-                    TextField(
-                        readOnly = true, value = albumColumnIndex?.let { header.getOrNull(it) } ?: "None", onValueChange = {},
-                        label = { Text("Album Name Column (Optional)") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isAlbumExpanded) },
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, disabledContainerColor = Color.Transparent,
-                            focusedIndicatorColor = colorPalette.accent, unfocusedIndicatorColor = colorPalette.textDisabled,
-                            focusedLabelColor = colorPalette.accent, unfocusedLabelColor = colorPalette.textSecondary,
-                            focusedTextColor = colorPalette.text, unfocusedTextColor = colorPalette.text,
-                        ),
-                        modifier = Modifier.menuAnchor().fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(expanded = isAlbumExpanded, onDismissRequest = { isAlbumExpanded = false }, modifier = Modifier.background(colorPalette.background2)) {
-                        DropdownMenuItem(text = { Text("None", color = colorPalette.text) }, onClick = {
-                            albumColumnIndex = null
-                            isAlbumExpanded = false
-                        })
-                        header.forEachIndexed { index, column ->
-                            DropdownMenuItem(text = { Text(column, color = colorPalette.text) }, onClick = {
-                                albumColumnIndex = index
-                                isAlbumExpanded = false
-                            })
-                        }
-                    }
-                }
-
-
-                Spacer(modifier = Modifier.height(8.dp))
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    DialogTextButton(text = stringResource(R.string.cancel), onClick = { showingColumnMappingDialog = null }, modifier = Modifier.align(Alignment.CenterStart))
-                    DialogTextButton(text = stringResource(R.string.next), onClick = {
-                        coroutineScope.launch {
-                            context.contentResolver.openInputStream(uri)?.let { inputStream ->
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(modifier = Modifier.fillMaxWidth()) {
+                DialogTextButton(text = "Cancel", onClick = { showingColumnMappingDialog = null }, modifier = Modifier.align(Alignment.CenterStart))
+                DialogTextButton(text = "Next", onClick = {
+                    coroutineScope.launch {
+                        runCatching {
+                            context.contentResolver.openInputStream(uri)?.use { input ->
                                 val parser = CsvPlaylistParser()
-                                val songList = parser.parse(inputStream, titleColumnIndex, artistColumnIndex, albumColumnIndex)
+                                val songList = parser.parse(input, titleColumnIndex, artistColumnIndex, albumColumnIndex)
                                 showingNameDialog = songList
                                 showingColumnMappingDialog = null
                             }
+                        }.onFailure {
+                            Toast.makeText(context, "Gagal membaca CSV", Toast.LENGTH_SHORT).show()
                         }
-                    }, modifier = Modifier.align(Alignment.CenterEnd))
-                }
-            }
-        }
-    }
-
-    // CSV Dialog 2: Name Playlist
-    if (showingNameDialog != null) {
-        DefaultDialog(onDismiss = { showingNameDialog = null }) {
-            var playlistName by remember { mutableStateOf("") }
-            Column(modifier = Modifier
-                .fillMaxWidth()
-                .padding(all = 24.dp)) {
-                Text(text = stringResource(R.string.name_your_playlist_title), style = typography.m.semiBold, modifier = Modifier.padding(bottom = 16.dp))
-                TextField(value = playlistName, onValueChange = { playlistName = it }, hintText = stringResource(R.string.playlist_name_hint))
-                Spacer(modifier = Modifier.height(24.dp))
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    DialogTextButton(text = stringResource(R.string.cancel), onClick = { showingNameDialog = null }, modifier = Modifier.align(Alignment.CenterStart))
-                    Button(
-                        onClick = {
-                            showingImportDialog = true
-                            val songList = showingNameDialog ?: emptyList()
-                            val unknownErrorString = context.getString(R.string.unknown_error)
-                            showingNameDialog = null
-
-                            coroutineScope.launch {
-                                val importer = PlaylistImporter()
-                                importer.import(
-                                    songList = songList,
-                                    playlistName = playlistName,
-                                    unknownErrorMessage = unknownErrorString,
-                                    onProgressUpdate = { status -> importStatus = status }
-                                )
-                            }
-                        },
-                        enabled = playlistName.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = colorPalette.accent, contentColor = colorPalette.text,
-                            disabledContainerColor = Color.Transparent, disabledContentColor = colorPalette.textDisabled
-                        ),
-                        elevation = ButtonDefaults.buttonElevation(0.dp),
-                        modifier = Modifier.align(Alignment.CenterEnd)
-                    ) {
-                        Text(stringResource(R.string.create_playlist_button))
                     }
+                }, modifier = Modifier.align(Alignment.CenterEnd))
+            }
+        }
+    }
+}
+
+// CSV Dialog 2: Name Playlist
+if (showingNameDialog != null) {
+    DefaultDialog(onDismiss = { showingNameDialog = null }) {
+        var playlistName by remember { mutableStateOf("") }
+        Column(modifier = Modifier.fillMaxWidth().padding(all = 24.dp)) {
+            Text("Nama Playlist", style = typography.m.semiBold, modifier = Modifier.padding(bottom = 16.dp))
+            TextField(value = playlistName, onValueChange = { playlistName = it }, hintText = "Masukkan nama playlist")
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Box(modifier = Modifier.fillMaxWidth()) {
+                DialogTextButton(text = "Cancel", onClick = { showingNameDialog = null }, modifier = Modifier.align(Alignment.CenterStart))
+                Button(
+                    onClick = {
+                        showingImportDialog = true
+                        val songList = showingNameDialog ?: emptyList()
+                        val unknownErrorString = context.getString(R.string.unknown_error)
+                        showingNameDialog = null
+
+                        coroutineScope.launch {
+                            val importer = PlaylistImporter()
+                            importer.import(
+                                songList = songList,
+                                playlistName = playlistName,
+                                unknownErrorMessage = unknownErrorString,
+                                onProgressUpdate = { status -> importStatus = status }
+                            )
+                        }
+                    },
+                    enabled = playlistName.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = colorPalette.accent),
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                ) {
+                    Text("Import Playlist")
                 }
             }
         }
     }
-
+}
     // CSV Dialog 3: Import Progress
     if (showingImportDialog) {
         DefaultDialog(onDismiss = {
