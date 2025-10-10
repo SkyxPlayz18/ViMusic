@@ -1,61 +1,72 @@
 package it.vfsfitvnm.vimusic.features.import
 
-import android.util.Log
 import java.io.InputStream
 import kotlin.math.max
 
 class CsvPlaylistParser {
 
     companion object {
+        // Regex untuk pecah CSV aman (support tanda kutip dan koma di dalam cell)
         private const val CSV_SPLIT_REGEX = ",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"
         private val csvSplitter = CSV_SPLIT_REGEX.toRegex()
     }
 
+    // Ambil header CSV (baris pertama)
     fun getHeader(inputStream: InputStream): List<String> {
         return inputStream.bufferedReader().useLines { lines ->
             lines.firstOrNull()?.splitCsvLine() ?: emptyList()
         }
     }
 
+    // Parse CSV menjadi list lagu (SongImportInfo)
     fun parse(
         inputStream: InputStream,
         titleColumnIndex: Int,
         artistColumnIndex: Int,
-        albumColumnIndex: Int? // Optional album column index
+        albumColumnIndex: Int? // optional, tapi tetap diambil kalau ada
     ): List<SongImportInfo> {
         val songList = mutableListOf<SongImportInfo>()
+        val reader = inputStream.bufferedReader()
 
-        inputStream.bufferedReader().useLines { lines ->
-            val dataLines = lines.drop(1) // Assuming header is always present
+        reader.useLines { lines ->
+            val dataLines = lines.drop(1) // skip header CSV
 
-            dataLines.forEachIndexed { index, line ->
-                if (line.isBlank()) return@forEachIndexed
+            dataLines.forEach { line ->
+                if (line.isBlank()) return@forEach
 
                 val columns = line.splitCsvLine()
+                val maxRequiredIndex = max(titleColumnIndex, artistColumnIndex)
+                if (columns.size <= maxRequiredIndex) return@forEach
 
-                try {
-                    val title = columns[titleColumnIndex]
-                    val artist = columns[artistColumnIndex]
-                    val album = albumColumnIndex?.let {
-                        if (columns.size > it) columns[it].takeIf(String::isNotBlank) else null
-                    }
+                val title = columns.getOrNull(titleColumnIndex)?.trim()?.removeSurrounding("\"") ?: ""
+                val artist = columns.getOrNull(artistColumnIndex)?.trim()?.removeSurrounding("\"") ?: ""
+                val album = albumColumnIndex?.let {
+                    columns.getOrNull(it)?.trim()?.removeSurrounding("\"")?.ifBlank { null }
+                }
 
-                    if (title.isNotBlank() && artist.isNotBlank()) {
-                        songList.add(SongImportInfo(title = title, artist = artist, album = album))
-                    } else {
-                        Log.w("CsvPlaylistParser", "Skipping row ${index + 2} due to blank title or artist.")
-                    }
-                } catch (_: IndexOutOfBoundsException) {
-                    val maxIndex = max(titleColumnIndex, artistColumnIndex)
-                    Log.w("CsvPlaylistParser", "Skipping malformed CSV row ${index + 2}. Expected at least ${maxIndex + 1} columns, but found ${columns.size}.")
+                // Hanya ambil lagu dengan title & artist valid, dan bukan header palsu
+                if (title.isNotEmpty() && artist.isNotEmpty() && !title.equals("Track Name", true)) {
+                    songList.add(
+                        SongImportInfo(
+                            title = normalizeField(title),
+                            artist = normalizeField(artist),
+                            album = album?.let { normalizeField(it) }
+                        )
+                    )
                 }
             }
         }
         return songList
     }
 
+    // Fungsi bantu buat pecah baris CSV
     private fun String.splitCsvLine(): List<String> {
         return this.split(csvSplitter)
             .map { it.trim().removeSurrounding("\"") }
+    }
+
+    // Normalisasi field biar gak nyasar (hapus spasi ganda, trim ujung)
+    private fun normalizeField(value: String): String {
+        return value.replace(Regex("\\s+"), " ").trim()
     }
 }
