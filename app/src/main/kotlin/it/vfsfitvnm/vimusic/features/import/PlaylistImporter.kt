@@ -70,66 +70,73 @@ class PlaylistImporter {
             val batchSize = 10
             songList.chunked(batchSize).forEach { batch ->
                 coroutineScope {
-                    val deferredSongsInBatch = batch.map { track ->
-                        async(Dispatchers.IO) {
-                            val q = "${track.title} ${track.artist} ${track.album ?: ""}"
-                            logAppend("🔍 Searching: \"$q\"")
+                    val deferredSongsInBatch = mutableListOf<Deferred<Pair<SongImportInfo, Pair<Song, List<Innertube.Info<it.vfsfitvnm.providers.innertube.models.NavigationEndpoint.Endpoint.Browse>>>>?>>()
 
-                            val searchCandidates = Innertube.searchPage(
-                                body = SearchBody(query = q, params = Innertube.SearchFilter.Song.value)
-                            ) { content ->
-                                content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
-                            }?.getOrNull()?.items
+batch.forEachIndexed { index, track ->
+    deferredSongsInBatch.add(
+        async(Dispatchers.IO) {
+            val searchQuery = "${track.title} ${track.artist} ${track.album ?: ""}"
 
-                            if (searchCandidates.isNullOrEmpty()) {
-                                logAppend("❌ No results for ${track.title}")
-                                return@async null
-                            }
+            val searchCandidates = Innertube.searchPage(
+                body = SearchBody(query = searchQuery, params = Innertube.SearchFilter.Song.value)
+            ) { content ->
+                content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
+            }?.getOrNull()?.items
 
-                            val bestMatch = findBestMatchInResults(track, searchCandidates, logAppend)
-                            bestMatch?.let {
-                                val artistsWithEndpoints = it.authors?.filter { a ->
-                                    val name = a.name?.trim() ?: ""
-                                    a.endpoint != null && name.isNotEmpty() && !name.contains(":")
-                                } ?: emptyList()
+            if (searchCandidates.isNullOrEmpty()) {
+                return@async null
+            }
 
-                                val artistsText = artistsWithEndpoints.joinToString(" & ") { it.name ?: "" }
-
-                                Song(
-                                    id = it.info?.endpoint?.videoId ?: "",
-                                    title = it.info?.name ?: "",
-                                    artistsText = artistsText,
-                                    durationText = it.durationText,
-                                    thumbnailUrl = it.thumbnail?.url,
-                                    album = it.album?.name
-                                ) to artistsWithEndpoints
-                            }
-                        }
+            val bestMatch = findBestMatchInResults(track, searchCandidates)
+            bestMatch?.let {
+                val artistsWithEndpoints = it.authors?.let { authors ->
+                    val validAuthors = authors.filter { author ->
+                        val name = author.name?.trim() ?: ""
+                        author.endpoint != null && name.isNotEmpty() && !name.contains(":")
                     }
+                    if (validAuthors.size > 1) validAuthors.dropLast(1) else validAuthors
+                } ?: emptyList()
 
-                    batch.forEachIndexed { index, song ->
-    deferredSongsInBatch.add(async {
-        importSong(song, playlistId.toLong(), index)
-    })
-                    }
-
-                    val results = deferredSongsInBatch.awaitAll()
-                    batch.zip(results).forEach { (originalTrack, result) ->
-                        if (result != null) {
-                            val (song, artistsWithEndpoints) = result
-                            if (song.id.isNotBlank()) {
-                                songsToAdd.add(song to artistsWithEndpoints)
-                            } else {
-                                failedTracks.add(originalTrack)
-                            }
-                        } else {
-                            failedTracks.add(originalTrack)
-                        }
+                val artistsText = when (artistsWithEndpoints.size) {
+                    0 -> ""
+                    1 -> artistsWithEndpoints[0].name.toString().trim()
+                    2 -> "${artistsWithEndpoints[0].name.toString().trim()} & ${artistsWithEndpoints[1].name.toString().trim()}"
+                    else -> {
+                        val allButLast = artistsWithEndpoints.dropLast(1).joinToString(", ") { it.name.toString().trim() }
+                        val last = artistsWithEndpoints.last().name.toString().trim()
+                        "$allButLast & $last"
                     }
                 }
-                processedCount += batch.size
-                onProgressUpdate(ImportStatus.InProgress(processedCount, totalTracks))
+
+                track to (Song(
+                    id = it.info?.endpoint?.videoId ?: "",
+                    title = it.info?.name ?: "",
+                    artistsText = artistsText,
+                    durationText = it.durationText,
+                    thumbnailUrl = it.thumbnail?.url,
+                    album = it.album?.name
+                ) to artistsWithEndpoints)
             }
+        }
+    )
+}
+
+val results = deferredSongsInBatch.awaitAll()
+batch.zip(results).forEach { (originalTrack, result) ->
+    if (result != null) {
+        val (song, artistsWithEndpoints) = result.second
+        if (song.id.isNotBlank()) {
+            songsToAdd.add(song to artistsWithEndpoints)
+        } else {
+            failedTracks.add(originalTrack)
+        }
+    } else {
+        failedTracks.add(originalTrack)
+    }
+}
+processedCount += batch.size
+onProgressUpdate(ImportStatus.InProgress(processedCount, totalTracks))
+                }
 
             if (songsToAdd.isNotEmpty()) {
                 transaction {
