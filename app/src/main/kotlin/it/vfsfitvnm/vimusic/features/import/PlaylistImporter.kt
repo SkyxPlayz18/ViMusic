@@ -120,16 +120,16 @@ if (searchCandidates.isNullOrEmpty() && !track.artist.isNullOrBlank()) {
 }
                                 // 2) If CSV had YouTube id, prefer candidate with same videoId
                                 maybeYoutubeId?.let { id ->
-                                    val direct = searchCandidates.firstOrNull { it.info?.endpoint?.videoId == id }
+                                    val direct = searchCandidates?.firstOrNull { it.info?.endpoint?.videoId == id }
                                     if (direct != null) return@async buildSongFromInnertube(direct)
                                 }
 
                                 // 3) Try strict matching: normalized title exact + primary artist contains
-                                val strict = findStrictMatch(track, searchCandidates)
+                                val strict = findStrictMatch(track, searchCandidates ?: emptyList())
                                 if (strict != null) return@async buildSongFromInnertube(strict)
 
                                 // 4) fallback to best scored candidate (fuzzy) using existing scoring
-                                val best = findBestMatchInResults(track, searchCandidates)
+                                val best = findBestMatchInResults(track, searchCandidates ?: emptyList())
                                 if (best != null) return@async buildSongFromInnertube(best)
 
                                 null
@@ -144,7 +144,7 @@ if (searchCandidates.isNullOrEmpty() && !track.artist.isNullOrBlank()) {
                     batch.zip(results).forEach { (originalTrack, result) ->
                         if (result != null) {
                             val (song, artistsWithEndpoints) = result
-                            if (song.id.isNotBlank()) songsToAdd.add(song to artistsWithEndpoints) else failedTracks.add(originalTrack)
+if (song.id.isNotBlank()) songsToAdd.add(song to artistsWithEndpoints) else failedTracks.add(originalTrack)
                         } else {
                             failedTracks.add(originalTrack)
                         }
