@@ -20,6 +20,7 @@ import kotlin.math.max
 import kotlin.math.min
 import java.util.Locale
 import java.util.regex.Pattern
+import java.text.Normalizer
 
 data class SongImportInfo(
     val title: String,
@@ -221,6 +222,14 @@ class PlaylistImporter {
 
         // else return first exact title candidate (less ideal)
         return exactTitleCandidates.firstOrNull()
+    }
+
+    private fun normalizeUnicode(input: String): String {
+    val normalized = Normalizer.normalize(input, Normalizer.Form.NFKC)
+    // Hapus karakter simbol, tanda baca, dan spasi berlebih
+    return normalized.replace(Regex("[^\\p{L}\\p{N}\\s]"), "")
+        .trim()
+        .lowercase()
     }
 
     private fun findBestMatchInResults(importTrack: SongImportInfo, candidates: List<Innertube.SongItem>): Innertube.SongItem? {
