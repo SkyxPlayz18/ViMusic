@@ -99,20 +99,25 @@ class PlaylistImporter {
 
                                 val fallbackQuery = normalizeUnicode(searchQuery)
 
-                                // fallback no candidates
-                                if (searchCandidates.isNullOrEmpty()) {
-    // Coba ulang pakai teks yang dinormalisasi (biar huruf asing bisa cocok)
-    if (fallbackQuery != searchQuery) {
-        val fallbackResults = Innertube.searchPage(
-            body = SearchBody(query = fallbackQuery, params = Innertube.SearchFilter.Song.value)
-        )?.getOrNull()?.items
+                                val fallbackResults = Innertube.searchPage(
+    body = SearchBody(query = fallbackQuery, params = Innertube.SearchFilter.Song.value)
+) { content ->
+    content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
+}?.getOrNull()?.items?.filterIsInstance<Innertube.SongItem>()
 
-        if (!fallbackResults.isNullOrEmpty()) {
-            return@async findBestMatchInResults(track, fallbackResults)
-        }
+                                // Fallback terakhir: coba cuma pakai nama artis aja
+if (searchCandidates.isNullOrEmpty() && !track.artist.isNullOrBlank()) {
+    val artistOnlyQuery = normalizeUnicode(track.artist)
+    val artistOnlyResults = Innertube.searchPage(
+        body = SearchBody(query = artistOnlyQuery, params = Innertube.SearchFilter.Song.value)
+    ) { content ->
+        content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
+    }?.getOrNull()?.items?.filterIsInstance<Innertube.SongItem>()
+
+    if (!artistOnlyResults.isNullOrEmpty()) {
+        return@async findBestMatchInResults(track, artistOnlyResults)
     }
-    return@async null
-                                }
+}
                                 // 2) If CSV had YouTube id, prefer candidate with same videoId
                                 maybeYoutubeId?.let { id ->
                                     val direct = searchCandidates.firstOrNull { it.info?.endpoint?.videoId == id }
