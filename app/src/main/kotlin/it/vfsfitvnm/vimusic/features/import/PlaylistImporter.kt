@@ -159,6 +159,10 @@ batch.zip(results).forEach { (originalTrack, resultPair) ->
 }
 // --- END REPLACE BLOCK ---
 
+processedCount += batch.size  
+            onProgressUpdate(ImportStatus.InProgress(processed = processedCount, total = totalTracks))  
+        }  
+
             if (songsToAdd.isNotEmpty()) {
                 transaction {
                     val newPlaylist = Playlist(name = playlistName)
