@@ -97,11 +97,22 @@ class PlaylistImporter {
                                     content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
                                 }?.getOrNull()?.items?.filterIsInstance<Innertube.SongItem>()
 
+                                val fallbackQuery = normalizeUnicode(searchQuery)
+
                                 // fallback no candidates
                                 if (searchCandidates.isNullOrEmpty()) {
-                                    return@async null
-                                }
+    // Coba ulang pakai teks yang dinormalisasi (biar huruf asing bisa cocok)
+    if (fallbackQuery != searchQuery) {
+        val fallbackResults = Innertube.searchPage(
+            body = SearchBody(query = fallbackQuery, params = Innertube.SearchFilter.Song.value)
+        )?.getOrNull()?.items
 
+        if (!fallbackResults.isNullOrEmpty()) {
+            return@async findBestMatchInResults(track, fallbackResults)
+        }
+    }
+    return@async null
+                                }
                                 // 2) If CSV had YouTube id, prefer candidate with same videoId
                                 maybeYoutubeId?.let { id ->
                                     val direct = searchCandidates.firstOrNull { it.info?.endpoint?.videoId == id }
@@ -253,7 +264,7 @@ class PlaylistImporter {
     }
 
     private fun parseSongInfo(title: String, artists: String, album: String?): ProcessedSongInfo {
-        val normalizedTitle = normalize(title)
+        val normalizedTitle = normalizeUnicode(title)
         val modifierRegex = """[(\[].*?[)\]]|-.*""".toRegex()
         val foundModifiers = modifierRegex.findAll(normalizedTitle)
             .map { it.value.replace(Regex("[\\[\\]()\\-]"), "").trim() }
