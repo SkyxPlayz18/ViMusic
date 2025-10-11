@@ -352,6 +352,14 @@ batch.zip(results).forEach { (originalTrack, resultPair) ->
         return s
     }
 
+    private fun normalizeUnicode(input: String): String {
+    // hapus diakritik — aman untuk latin + sebagian karakter,
+    // ini nggak transliterate Kanji/Kana, tapi bantu untuk accented latin
+    val ascii = java.text.Normalizer.normalize(input, java.text.Normalizer.Form.NFD)
+        .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
+    return ascii.replace(Regex("[^\\p{L}0-9\\s]"), " ").replace(Regex("\\s+"), " ").trim().lowercase(Locale.getDefault())
+    }
+
     private fun extractYoutubeId(uri: String?): String? {
         if (uri == null) return null
         // If the CSV has a bare 11-char id, accept it; if a youtube url, extract
