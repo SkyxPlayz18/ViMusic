@@ -46,7 +46,7 @@ class PlaylistImporter {
     )
 
     companion object {
-        private const val MINIMUM_SCORE_THRESHOLD = 60 // lebih ketat
+        private const val MINIMUM_SCORE_THRESHOLD = 55 // lebih ketat
         private const val PRIMARY_ARTIST_EXACT_MATCH_BONUS = 50
         private const val OTHER_ARTIST_MATCH_BONUS = 10
         private const val TITLE_SIMILARITY_WEIGHT = 40
