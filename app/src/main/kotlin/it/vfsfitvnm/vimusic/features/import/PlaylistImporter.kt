@@ -199,7 +199,9 @@ class PlaylistImporter {
     private suspend fun albumArtistFallbackSearch(track: SongImportInfo): List<Innertube.SongItem>? {
         val query = "${track.artist} ${track.album ?: ""}".trim()
         if (query.isBlank()) return null
-        val res = Innertube.searchPage(body = SearchBody(query = query)) { content ->
+        val res = Innertube.searchPage(
+    body = SearchBody(query = query, params = Innertube.SearchFilter.Song.value)
+) { content ->
             content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
         }?.getOrNull()?.items
         return res?.filterIsInstance<Innertube.SongItem>()
