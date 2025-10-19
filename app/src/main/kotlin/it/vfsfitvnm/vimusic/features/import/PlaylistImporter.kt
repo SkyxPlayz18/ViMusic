@@ -2,37 +2,33 @@ package it.vfsfitvnm.vimusic.features.import
 
 import android.util.Log
 import it.vfsfitvnm.vimusic.Database
-import it.vfsfitvnm.vimusic.models.Playlist
-import it.vfsfitvnm.vimusic.models.Song
-import it.vfsfitvnm.vimusic.models.SongPlaylistMap
-import it.vfsfitvnm.vimusic.models.Artist
-import it.vfsfitvnm.vimusic.models.SongArtistMap
+import it.vfsfitvnm.vimusic.models.*
 import it.vfsfitvnm.vimusic.transaction
 import it.vfsfitvnm.providers.innertube.Innertube
+import it.vfsfitvnm.providers.innertube.models.NavigationEndpoint
 import it.vfsfitvnm.providers.innertube.models.bodies.SearchBody
 import it.vfsfitvnm.providers.innertube.requests.searchPage
 import it.vfsfitvnm.providers.innertube.utils.from
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.*
 import java.text.Normalizer
-import java.util.Locale
-import java.util.regex.Pattern
-import kotlin.math.max
-import kotlin.math.min
+import kotlin.math.*
 
 data class SongImportInfo(
     val title: String,
     val artist: String,
     val album: String?,
-    val trackUri: String? = null // optional: may contain youtube url/id or spotify uri
+    val trackUri: String? = null
 )
 
 sealed class ImportStatus {
-    object Idle : ImportStatus()
+    data object Idle : ImportStatus()
     data class InProgress(val processed: Int, val total: Int) : ImportStatus()
-    data class Complete(val imported: Int, val failed: Int, val total: Int, val failedTracks: List<SongImportInfo>) : ImportStatus()
+    data class Complete(
+        val imported: Int,
+        val failed: Int,
+        val total: Int,
+        val failedTracks: List<SongImportInfo>
+    ) : ImportStatus()
     data class Error(val message: String) : ImportStatus()
 }
 
@@ -46,20 +42,14 @@ class PlaylistImporter {
     )
 
     companion object {
-        private const val MINIMUM_SCORE_THRESHOLD = 55 // lebih ketat
+        private const val MINIMUM_SCORE_THRESHOLD = 55
+        private const val EXACT_TITLE_BONUS = 100
         private const val PRIMARY_ARTIST_EXACT_MATCH_BONUS = 50
         private const val OTHER_ARTIST_MATCH_BONUS = 10
-        private const val TITLE_SIMILARITY_WEIGHT = 40
+        private const val TITLE_SIMILARITY_WEIGHT = 50
         private const val ALBUM_MATCH_BONUS = 40
         private const val MODIFIER_MATCH_BONUS = 25
         private const val MODIFIER_MISMATCH_PENALTY = 40
-        private const val EXACT_TITLE_BONUS = 60 // besar: exact title match after normalize => strong prefer
-        private val KNOWN_MODIFIERS = setOf(
-            "remix", "edit", "mix", "live", "cover", "instrumental", "karaoke",
-            "acoustic", "unplugged", "reverb", "slowed", "sped", "sped up", "chopped", "screwed",
-            "deluxe", "version", "edition", "ultra", "japanese", "jpn", "korean", "kr"
-        )
-        private val YT_ID_REGEX: Pattern = Pattern.compile("(?:v=|/)([A-Za-z0-9_-]{11})") // simple extractor for yt urls/ids
     }
 
     suspend fun import(
@@ -70,114 +60,120 @@ class PlaylistImporter {
     ) {
         try {
             val totalTracks = songList.size
-            val songsToAdd = mutableListOf<Pair<Song, List<Innertube.Info<it.vfsfitvnm.providers.innertube.models.NavigationEndpoint.Endpoint.Browse>>>>()
+            val songsToAdd = mutableListOf<Pair<Song, List<Innertube.Info<NavigationEndpoint.Endpoint.Browse>>>>()
             val failedTracks = mutableListOf<SongImportInfo>()
             var processedCount = 0
 
-            onProgressUpdate(ImportStatus.InProgress(processed = 0, total = totalTracks))
+            onProgressUpdate(ImportStatus.InProgress(0, totalTracks))
 
             val batchSize = 10
             songList.chunked(batchSize).forEach { batch ->
                 coroutineScope {
-                    // Explicit Deferred type so awaitAll() returns List<Pair<Song, ...>?>
-                    val deferred: List<kotlinx.coroutines.Deferred<Pair<Song, List<Innertube.Info<it.vfsfitvnm.providers.innertube.models.NavigationEndpoint.Endpoint.Browse>>>?>> =
-                        batch.map { track ->
-                            async<Pair<Song, List<Innertube.Info<it.vfsfitvnm.providers.innertube.models.NavigationEndpoint.Endpoint.Browse>>>?>(Dispatchers.IO) {
-                                try {
-                                    // 1) If CSV contains a YouTube id/url use it directly to identify the candidate.
-                                    val maybeYoutubeId = extractYoutubeId(track.trackUri)
+                    val deferred = batch.map { track ->
+                        async(Dispatchers.IO) {
+                            try {
+                                val cleanedBase = normalizeUnicode(track.title)
+                                val queries = listOfNotNull(
+                                    "$cleanedBase ${track.artist} ${track.album ?: ""}".trim(),
+                                    "$cleanedBase ${track.artist}".trim(),
+                                    "${track.artist} $cleanedBase".trim(),
+                                    "$cleanedBase".trim(),
+                                    track.title.trim()
+                                ).distinct()
 
-                                    val searchQuery = "${track.title} ${track.artist} ${track.album ?: ""}".trim()
+                                var candidates: List<Innertube.SongItem>? = null
 
-                                    var searchCandidates = Innertube.searchPage(
-                                        body = SearchBody(query = searchQuery, params = Innertube.SearchFilter.Song.value)
+                                // 🔹 Primary search (multi-query)
+                                for (q in queries) {
+                                    if (q.isBlank()) continue
+                                    val res = Innertube.searchPage(
+                                        body = SearchBody(query = q, params = Innertube.SearchFilter.Song.value)
                                     ) { content ->
                                         content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
-                                    }?.getOrNull()?.items?.filterIsInstance<Innertube.SongItem>()
+                                    }?.getOrNull()?.items
 
-                                    // fallback 1: normalized unicode (remove diacritics) if no results
-                                    if (searchCandidates.isNullOrEmpty()) {
-                                        val normalizedQuery = normalizeUnicode(searchQuery)
-                                        if (normalizedQuery != searchQuery) {
-                                            searchCandidates = Innertube.searchPage(
-                                                body = SearchBody(query = normalizedQuery, params = Innertube.SearchFilter.Song.value)
-                                            ) { content ->
-                                                content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
-                                            }?.getOrNull()?.items?.filterIsInstance<Innertube.SongItem>()
-                                        }
+                                    if (!res.isNullOrEmpty()) {
+                                        candidates = res.filterIsInstance<Innertube.SongItem>()
+                                        break
                                     }
-
-                                    // fallback 2: artist-only search
-                                    if (searchCandidates.isNullOrEmpty() && !track.artist.isNullOrBlank()) {
-                                        val artistOnlyQuery = normalizeUnicode(track.artist)
-                                        searchCandidates = Innertube.searchPage(
-                                            body = SearchBody(query = artistOnlyQuery, params = Innertube.SearchFilter.Song.value)
-                                        ) { content ->
-                                            content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
-                                        }?.getOrNull()?.items?.filterIsInstance<Innertube.SongItem>()
-                                    }
-
-                                    if (searchCandidates.isNullOrEmpty()) {
-                                        return@async null
-                                    }
-
-                                    // 2) If CSV had YouTube id, prefer candidate with same videoId
-                                    maybeYoutubeId?.let { id ->
-                                        val direct = searchCandidates.firstOrNull { it.info?.endpoint?.videoId == id }
-                                        if (direct != null) return@async buildSongFromInnertube(direct)
-                                    }
-
-                                    // 3) Try strict matching: normalized title exact + primary artist contains
-                                    val strict = findStrictMatch(track, searchCandidates)
-                                    if (strict != null) return@async buildSongFromInnertube(strict)
-
-                                    // 4) fallback to best scored candidate (fuzzy) using scoring
-                                    val best = findBestMatchInResults(track, searchCandidates)
-                                    if (best != null) return@async buildSongFromInnertube(best)
-
-                                    null
-                                } catch (t: Throwable) {
-                                    Log.e("PlaylistImporter", "Error while processing ${track.title}: ${t.message}")
-                                    null
                                 }
-                            }
-                        }
 
-                    val results = deferred.awaitAll()
-                    batch.zip(results).forEach { (originalTrack, resultPair) ->
-                        if (resultPair != null) {
-                            val (song, artistsWithEndpoints) = resultPair
-                            if (song.id.isNotBlank()) {
-                                songsToAdd.add(song to artistsWithEndpoints)
-                            } else {
-                                failedTracks.add(originalTrack)
+                                // 🔹 Fallback 1: Search with Unicode-normalized (for kanji/hanzi)
+                                if (candidates.isNullOrEmpty() && isMostlyCJK(track.title)) {
+                                    val unicodeQuery = normalizeUnicode("${track.title} ${track.artist}")
+                                    val res = Innertube.searchPage(
+                                        body = SearchBody(query = unicodeQuery, params = Innertube.SearchFilter.Song.value)
+                                    ) { content ->
+                                        content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
+                                    }?.getOrNull()?.items
+                                    if (!res.isNullOrEmpty()) candidates = res.filterIsInstance<Innertube.SongItem>()
+                                }
+
+                                // 🔹 Fallback 2: album + artist search (for instrumental/soundtrack)
+                                if (candidates.isNullOrEmpty()) {
+                                    val albumArtistResults = albumArtistFallbackSearch(track)
+                                    if (!albumArtistResults.isNullOrEmpty()) candidates = albumArtistResults
+                                }
+
+                                if (candidates.isNullOrEmpty()) {
+                                    Log.w("PlaylistImporter", "❌ No results for ${track.title}")
+                                    return@async null
+                                }
+
+                                // Find best match
+                                val best = findBestMatchInResults(track, candidates)
+                                if (best == null) {
+                                    Log.w("PlaylistImporter", "⚠️ No confident match for ${track.title}")
+                                    return@async null
+                                }
+
+                                // Build song
+                                val artists = best.authors?.filter { it.name?.isNotBlank() == true } ?: emptyList()
+                                val song = Song(
+                                    id = best.info?.endpoint?.videoId ?: "",
+                                    title = best.info?.name ?: "",
+                                    artistsText = artists.joinToString(", ") { it.name ?: "" },
+                                    durationText = best.durationText,
+                                    thumbnailUrl = best.thumbnail?.url,
+                                    album = best.album?.name
+                                )
+                                song to artists
+                            } catch (t: Throwable) {
+                                Log.e("PlaylistImporter", "Error: ${t.message}")
+                                null
                             }
-                        } else {
-                            failedTracks.add(originalTrack)
                         }
                     }
-                }
 
+                    val results = deferred.awaitAll()
+                    batch.zip(results).forEach { (original, res) ->
+                        if (res != null) {
+                            val (song, artists) = res
+                            if (song.id.isNotBlank()) songsToAdd.add(song to artists) else failedTracks.add(original)
+                        } else failedTracks.add(original)
+                    }
+                }
                 processedCount += batch.size
-                onProgressUpdate(ImportStatus.InProgress(processed = processedCount, total = totalTracks))
+                onProgressUpdate(ImportStatus.InProgress(processedCount, totalTracks))
             }
 
+            // save playlist
             if (songsToAdd.isNotEmpty()) {
                 transaction {
                     val newPlaylist = Playlist(name = playlistName)
-                    val newPlaylistId = Database.instance.insert(newPlaylist)
-                    if (newPlaylistId != -1L) {
-                        songsToAdd.forEachIndexed { index, (song, artistsWithEndpoints) ->
+                    val playlistId = Database.instance.insert(newPlaylist)
+                    if (playlistId != -1L) {
+                        songsToAdd.forEachIndexed { index, (song, artists) ->
                             Database.instance.upsert(song)
-                            artistsWithEndpoints.forEach { artistInfo ->
-                                val artistId = artistInfo.endpoint?.browseId
-                                val artistName = artistInfo.name
-                                if (artistId != null && artistName != null) {
-                                    Database.instance.upsert(Artist(id = artistId, name = artistName))
-                                    Database.instance.upsert(SongArtistMap(songId = song.id, artistId = artistId))
-                                }
+                            artists.forEach {
+                                val id = it.endpoint?.browseId ?: return@forEach
+                                val name = it.name ?: return@forEach
+                                Database.instance.upsert(Artist(id = id, name = name))
+                                Database.instance.upsert(SongArtistMap(songId = song.id, artistId = id))
                             }
-                            Database.instance.insert(SongPlaylistMap(songId = song.id, playlistId = newPlaylistId, position = index))
+                            Database.instance.insert(
+                                SongPlaylistMap(songId = song.id, playlistId = playlistId, position = index)
+                            )
                         }
                     }
                 }
@@ -191,186 +187,77 @@ class PlaylistImporter {
                     failedTracks = failedTracks
                 )
             )
-
         } catch (e: Exception) {
-            Log.e("PlaylistImporter", "An error occurred during the import process.", e)
+            Log.e("PlaylistImporter", "❌ Import failed: ${e.message}")
             onProgressUpdate(ImportStatus.Error(e.message ?: unknownErrorMessage))
         }
     }
 
-    // --- Helpers as class-level private functions (not nested) ---
+    // --------- 🔹 HELPERS ---------
 
-    /** Build Song + artist infos tuple from Innertube.SongItem */
-    private fun buildSongFromInnertube(item: Innertube.SongItem): Pair<Song, List<Innertube.Info<it.vfsfitvnm.providers.innertube.models.NavigationEndpoint.Endpoint.Browse>>> {
-        val artistsWithEndpoints = item.authors ?: emptyList()
-        val artistsText = when (artistsWithEndpoints.size) {
-            0 -> ""
-            1 -> artistsWithEndpoints[0].name.toString().trim()
-            2 -> "${artistsWithEndpoints[0].name.toString().trim()} & ${artistsWithEndpoints[1].name.toString().trim()}"
-            else -> {
-                val allButLast = artistsWithEndpoints.dropLast(1).joinToString(", ") { it.name.toString().trim() }
-                val last = artistsWithEndpoints.last().name.toString().trim()
-                "$allButLast & $last"
-            }
-        }
-
-        val song = Song(
-            id = item.info?.endpoint?.videoId ?: "",
-            title = item.info?.name ?: "",
-            artistsText = artistsText,
-            durationText = item.durationText,
-            thumbnailUrl = item.thumbnail?.url,
-            album = item.album?.name
-        )
-        return song to artistsWithEndpoints
+    /** Fallback untuk soundtrack Jepang/Cina yg gagal via title search */
+    private suspend fun albumArtistFallbackSearch(track: SongImportInfo): List<Innertube.SongItem>? {
+        val query = "${track.artist} ${track.album ?: ""}".trim()
+        if (query.isBlank()) return null
+        val res = Innertube.searchPage(body = SearchBody(query = query)) { content ->
+            content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
+        }?.getOrNull()?.items
+        return res?.filterIsInstance<Innertube.SongItem>()
     }
 
-    /** Try strict matching: normalized title exact + primary artist contains; also prefer album match if available */
-    private fun findStrictMatch(importTrack: SongImportInfo, candidates: List<Innertube.SongItem>): Innertube.SongItem? {
-        val normTitle = normalize(importTrack.title)
-        val importPrimaryArtist = importTrack.artist.lowercase(Locale.getDefault()).trim()
-        val importAlbum = importTrack.album?.lowercase(Locale.getDefault())?.trim()
-
-        val exactTitleCandidates = candidates.filter { normalize(it.info?.name ?: "") == normTitle }
-        if (exactTitleCandidates.isEmpty()) return null
-
-        val artistMatching = exactTitleCandidates.filter { candidate ->
-            val candidateArtists = (candidate.authors?.joinToString(" ") { it.name ?: "" } ?: "").lowercase(Locale.getDefault())
-            candidateArtists.contains(importPrimaryArtist)
-        }
-
-        val albumMatched = artistMatching.firstOrNull { candidate ->
-            importAlbum != null && (candidate.album?.name?.lowercase(Locale.getDefault())?.contains(importAlbum) == true)
-        }
-        if (albumMatched != null) return albumMatched
-        if (artistMatching.isNotEmpty()) return artistMatching.first()
-
-        val albumFallback = exactTitleCandidates.firstOrNull { candidate ->
-            importAlbum != null && (candidate.album?.name?.lowercase(Locale.getDefault())?.contains(importAlbum) == true)
-        }
-        if (albumFallback != null) return albumFallback
-
-        return exactTitleCandidates.firstOrNull()
+    private fun isMostlyCJK(text: String): Boolean {
+        if (text.isBlank()) return false
+        val total = text.length
+        val cjk = text.count { it in '\u4E00'..'\u9FFF' || it in '\u3040'..'\u30FF' || it in '\uAC00'..'\uD7AF' }
+        return cjk > total / 3
     }
 
-    private fun findBestMatchInResults(importTrack: SongImportInfo, candidates: List<Innertube.SongItem>): Innertube.SongItem? {
-        val importInfo = parseSongInfo(importTrack.title, importTrack.artist, importTrack.album)
-
-        val scoredCandidates = candidates.map { candidate ->
-            val candidateTitle = candidate.info?.name ?: ""
-            val candidateArtists = candidate.authors?.joinToString(" ") { it.name ?: "" } ?: ""
-            val candidateAlbum = candidate.album?.name
-            val candidateInfo = parseSongInfo(candidateTitle, candidateArtists, candidateAlbum)
-            var score = calculateMatchScore(importInfo, candidateInfo, candidateAlbum)
-
-            // exact normalized title bonus
-            if (normalize(importTrack.title) == normalize(candidateTitle)) score += EXACT_TITLE_BONUS
-
-            candidate to score
-        }
-
-        val best = scoredCandidates.maxByOrNull { (_, score) -> score }
-        return best?.takeIf { it.second >= MINIMUM_SCORE_THRESHOLD }?.first
+    private fun normalizeUnicode(input: String?): String {
+        if (input.isNullOrBlank()) return ""
+        val n = Normalizer.normalize(input, Normalizer.Form.NFKC)
+        return n.replace(Regex("\\p{M}"), "").trim().lowercase()
     }
 
-    private fun parseSongInfo(title: String, artists: String, album: String?): ProcessedSongInfo {
-        val normalizedTitle = normalize(title)
-        val modifierRegex = """[(\[].*?[)\]]|-.*""".toRegex()
-        val foundModifiers = modifierRegex.findAll(normalizedTitle)
-            .map { it.value.replace(Regex("[\\[\\]()\\-]"), "").trim() }
-            .flatMap { it.split(" ") }
-            .map { it.trim() }
-            .filter { word -> KNOWN_MODIFIERS.any { modifier -> word.contains(modifier) } }
-            .toSet()
+    // ---------- MATCH SCORING ----------
 
-        val baseTitle = modifierRegex.replace(normalizedTitle, "").trim()
-        val allArtists = artists.lowercase(Locale.getDefault()).split(Regex(",|&|feat\\.?|ft\\.?|with")).map { it.trim() }.filter { it.isNotEmpty() }
+    private fun findBestMatchInResults(track: SongImportInfo, candidates: List<Innertube.SongItem>): Innertube.SongItem? {
+        val normTitle = normalizeUnicode(track.title)
+        val importArtist = normalizeUnicode(track.artist)
 
-        return ProcessedSongInfo(baseTitle, allArtists.firstOrNull() ?: "", allArtists, foundModifiers, album?.lowercase(Locale.getDefault())?.trim())
+        val scored = candidates.map { c ->
+            val t = normalizeUnicode(c.info?.name ?: "")
+            val a = c.authors?.joinToString(" ") { it.name ?: "" } ?: ""
+            val sim = titleSimilarityUnicode(normTitle, t)
+            val artistMatch = a.contains(importArtist, ignoreCase = true)
+            val score = (sim * 100).toInt() + if (artistMatch) 50 else 0
+            c to score
+        }
+        val best = scored.maxByOrNull { it.second }
+        return best?.takeIf { it.second > 60 }?.first
     }
 
-    private fun calculateMatchScore(importInfo: ProcessedSongInfo, candidateInfo: ProcessedSongInfo, candidateAlbumName: String?): Int {
-        var score = 0
-
-        if (importInfo.primaryArtist.isNotEmpty() && candidateInfo.allArtists.any { it.contains(importInfo.primaryArtist) }) {
-            score += PRIMARY_ARTIST_EXACT_MATCH_BONUS
-        }
-        val otherImportArtists = importInfo.allArtists.drop(1)
-        score += otherImportArtists.count { importArtist ->
-            candidateInfo.allArtists.any { candidateArtist -> candidateArtist.contains(importArtist) }
-        } * OTHER_ARTIST_MATCH_BONUS
-
-        // require at least some artist match
-        if (score == 0) return 0
-
-        val titleDistance = levenshtein(importInfo.baseTitle, candidateInfo.baseTitle)
-        val maxLen = max(importInfo.baseTitle.length, candidateInfo.baseTitle.length)
-        if (maxLen > 0) {
-            score += ((1.0 - titleDistance.toDouble() / maxLen) * TITLE_SIMILARITY_WEIGHT).toInt()
-        }
-
-        importInfo.album?.let { importAlbum ->
-            candidateAlbumName?.lowercase(Locale.getDefault())?.let { candidateAlbum ->
-                if (candidateAlbum.contains(importAlbum)) {
-                    score += ALBUM_MATCH_BONUS
-                }
-            }
-        }
-
-        if (importInfo.modifiers.isNotEmpty() && importInfo.modifiers == candidateInfo.modifiers) {
-            score += MODIFIER_MATCH_BONUS * importInfo.modifiers.size
-        } else if (importInfo.modifiers.isEmpty() && candidateInfo.modifiers.isNotEmpty()) {
-            score -= MODIFIER_MISMATCH_PENALTY
-        } else if (importInfo.modifiers.isNotEmpty() && candidateInfo.modifiers.isEmpty()) {
-            score -= MODIFIER_MISMATCH_PENALTY / 2
-        }
-
-        return score
+    private fun titleSimilarityUnicode(a: String, b: String): Double {
+        if (a.isBlank() && b.isBlank()) return 1.0
+        val dist = levenshtein(a, b)
+        val maxLen = max(a.length, b.length).coerceAtLeast(1)
+        return 1.0 - dist.toDouble() / maxLen
     }
 
     private fun levenshtein(lhs: CharSequence, rhs: CharSequence): Int {
-        val lhsLength = lhs.length
-        val rhsLength = rhs.length
-        var cost = IntArray(lhsLength + 1) { it }
-        var newCost = IntArray(lhsLength + 1)
-
-        for (i in 1..rhsLength) {
+        val l = lhs.length
+        val r = rhs.length
+        var cost = IntArray(l + 1) { it }
+        var newCost = IntArray(l + 1)
+        for (i in 1..r) {
             newCost[0] = i
-            for (j in 1..lhsLength) {
+            for (j in 1..l) {
                 val match = if (lhs[j - 1] == rhs[i - 1]) 0 else 1
-                val costReplace = cost[j - 1] + match
-                val costInsert = cost[j] + 1
-                val costDelete = newCost[j - 1] + 1
-                newCost[j] = min(min(costInsert, costDelete), costReplace)
+                newCost[j] = min(min(cost[j] + 1, newCost[j - 1] + 1), cost[j - 1] + match)
             }
             val swap = cost
             cost = newCost
             newCost = swap
         }
-        return cost[lhsLength]
-    }
-
-    private fun normalize(input: String?): String {
-        if (input == null) return ""
-        var s = input.lowercase(Locale.getDefault()).trim()
-        s = s.replace(Regex("\\(.*?\\)|\\[.*?\\]"), " ")
-        s = s.replace(Regex("(?i)\\b(official|lyrics|audio|video|feat\\.?|ft\\.?|remix|live|hd|mv)\\b"), " ")
-        s = s.replace(Regex("[^\\p{L}0-9\\s]"), " ")
-        s = s.replace(Regex("\\s+"), " ").trim()
-        return s
-    }
-
-    private fun normalizeUnicode(input: String): String {
-        val ascii = Normalizer.normalize(input, Normalizer.Form.NFD)
-            .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
-        return ascii.replace(Regex("[^\\p{L}0-9\\s]"), " ").replace(Regex("\\s+"), " ").trim().lowercase(Locale.getDefault())
-    }
-
-    private fun extractYoutubeId(uri: String?): String? {
-        if (uri == null) return null
-        val trimmed = uri.trim()
-        if (trimmed.length == 11 && trimmed.matches(Regex("^[A-Za-z0-9_-]{11}\$"))) return trimmed
-        val matcher = YT_ID_REGEX.matcher(trimmed)
-        return if (matcher.find()) matcher.group(1) else null
+        return cost[l]
     }
 }
