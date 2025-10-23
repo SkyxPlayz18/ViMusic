@@ -18,6 +18,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import java.text.Normalizer
+import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
 
@@ -416,7 +417,13 @@ class PlaylistImporter {
 
 
 private fun normalizeUnicode(input: String): String {
-        val ascii = Normalizer.normalize(input, Normalizer.Form.NFD)
-            .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
-        return ascii.replace(Regex("[^\\p{L}0-9\\s]"), " ").replace(Regex("\\s+"), " ").trim().lowercase(Locale.getDefault())
+    if (input.isBlank()) return input
+    val normalized = Normalizer.normalize(input, Normalizer.Form.NFKC)
+    // hapus tanda diakritik, tapi biarkan huruf Jepang/Cina tetap
+    val cleaned = normalized.replace("\\p{M}+".toRegex(), "")
+    return cleaned
+        .replace(Regex("[\\p{Cntrl}]"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+        .lowercase(Locale.getDefault())
 }
