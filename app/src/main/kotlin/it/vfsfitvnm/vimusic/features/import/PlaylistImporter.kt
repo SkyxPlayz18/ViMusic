@@ -117,7 +117,7 @@ class PlaylistImporter {
                                     // try again without Song filter (wider)
                                     for (q in queries) {
                                         val res = Innertube.searchPage(
-                                            body = SearchBody(query = q)
+                                            body = SearchBody(query = q, params = Innertube.SearchFilter.Song.value)
                                         ) { content ->
                                             content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
                                         }?.getOrNull()?.items
@@ -140,7 +140,7 @@ class PlaylistImporter {
                                     // SECOND PASS (looser): try searching by title only with very high title-similarity requirement
                                     val titleOnlyQuery = track.title.trim()
                                     val fallbackRes = Innertube.searchPage(
-                                        body = SearchBody(query = titleOnlyQuery)
+                                        body = SearchBody(query = titleOnlyQuery, params = Innertube.SearchFilter.Song.value)
                                     ) { content ->
                                         content.musicResponsiveListItemRenderer?.let(Innertube.SongItem::from)
                                     }?.getOrNull()?.items?.filterIsInstance<Innertube.SongItem>()
