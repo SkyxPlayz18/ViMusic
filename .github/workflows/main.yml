@@ -37,16 +37,17 @@ jobs:
       - name: Clean Gradle build
         run: ./gradlew clean
 
-      # 5️⃣ Build APK Release
-      - name: Build Release APK
-        run: ./gradlew assembleRelease --stacktrace
+      - - name: Build Release APK
+  run: ./gradlew assembleRelease --stacktrace
 
-      # 6️⃣ Upload hasil build ke artifacts
-      - name: Upload Release APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: ViMusic-Release-v0.1.4
-          path: app/build/outputs/apk/release/app-release.apk
+- name: List APK outputs (debugging)
+  run: ls -R app/build/outputs || echo "No outputs found"
+
+- name: Upload Release APK
+  uses: actions/upload-artifact@v4
+  with:
+    name: ViMusic-Release-APK
+    path: app/build/outputs/apk/**/*.apk
 
   # (Opsional) Jalankan lint & test
   verify:
