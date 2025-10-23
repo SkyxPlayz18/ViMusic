@@ -413,3 +413,10 @@ class PlaylistImporter {
         return cost[l]
     }
 }
+
+
+private fun normalizeUnicode(input: String): String {
+        val ascii = Normalizer.normalize(input, Normalizer.Form.NFD)
+            .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
+        return ascii.replace(Regex("[^\\p{L}0-9\\s]"), " ").replace(Regex("\\s+"), " ").trim().lowercase(Locale.getDefault())
+}
