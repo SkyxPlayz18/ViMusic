@@ -34,27 +34,22 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
 
       - name: Decode keystore from Base64
-        working-directory: app
-        run: |
-          echo "$KEYSTORE_BASE64" | base64 --decode > my-release-key.keystore
-          ls -lh .
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+  working-directory: app
+  run: |
+    echo "$KEYSTORE_BASE64" | base64 --decode > my-release-key.keystore
+    ls -lh .
+  env:
+    KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
 
       - name: Clean
         run: ./gradlew clean
 
-      - name: Build Release APK (signed)
-        run: |
-          ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=app/my-release-key.keystore \
-            -Pandroid.injected.signing.store.password="${KEYSTORE_PASSWORD}" \
-            -Pandroid.injected.signing.key.alias="${KEY_ALIAS}" \
-            -Pandroid.injected.signing.key.password="${KEY_PASSWORD}"
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      - name: Build signed release
+  run: ./gradlew assembleRelease
+  env:
+    KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+    KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+    KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
       - name: Upload signed Release APK
         uses: actions/upload-artifact@v4
