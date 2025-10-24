@@ -45,13 +45,14 @@ android {
     }
 
     signingConfigs {
-        create("ci") {
-            storeFile = System.getenv("ANDROID_NIGHTLY_KEYSTORE")?.let { file(it) }
-            storePassword = System.getenv("ANDROID_NIGHTLY_KEYSTORE_PASSWORD")
-            keyAlias = System.getenv("ANDROID_NIGHTLY_KEYSTORE_ALIAS")
-            keyPassword = System.getenv("ANDROID_NIGHTLY_KEYSTORE_PASSWORD")
-        }
+    create("release") {
+        val keystorePath = file("$projectDir/my-release-key.keystore")
+        storeFile = keystorePath
+        storePassword = System.getenv("KEYSTORE_PASSWORD")
+        keyAlias = System.getenv("KEY_ALIAS")
+        keyPassword = System.getenv("KEY_PASSWORD")
     }
+}
 
     buildTypes {
         debug {
@@ -62,16 +63,17 @@ android {
         }
 
         release {
-            versionNameSuffix = "-RELEASE"
-            isMinifyEnabled = true
-            isShrinkResources = true
-            manifestPlaceholders["appName"] = "ViMusic"
-            buildConfigField("String", "LYRICS_API_BASE", "\"${localProperties["LYRICS_API_BASE"]}\"")
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-        }
+    versionNameSuffix = "-RELEASE"
+    isMinifyEnabled = true
+    isShrinkResources = true
+    manifestPlaceholders["appName"] = "ViMusic"
+    buildConfigField("String", "LYRICS_API_BASE", "\"${localProperties["LYRICS_API_BASE"]}\"")
+    signingConfig = signingConfigs.getByName("release") // 🔥 ini penting
+    proguardFiles(
+        getDefaultProguardFile("proguard-android-optimize.txt"),
+        "proguard-rules.pro"
+    )
+}
 
         create("nightly") {
             initWith(getByName("release"))
