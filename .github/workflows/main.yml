@@ -37,7 +37,6 @@ jobs:
   run: echo "$KEYSTORE_BASE64" | base64 --decode > ./my-release-key.keystore
   env:
     KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-    
       - name: Clean
         run: ./gradlew clean
 
