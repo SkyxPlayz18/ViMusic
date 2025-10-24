@@ -25,7 +25,7 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Restore Gradle cache (optional)
+      - name: Restore Gradle cache
         uses: actions/cache@v4
         with:
           path: |
@@ -34,6 +34,7 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
 
       - name: Decode keystore from Base64
+        working-directory: app
         run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > my-release-key.keystore
           ls -lh .
@@ -46,7 +47,7 @@ jobs:
       - name: Build Release APK (signed)
         run: |
           ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=my-release-key.keystore \
+            -Pandroid.injected.signing.store.file=app/my-release-key.keystore \
             -Pandroid.injected.signing.store.password="${KEYSTORE_PASSWORD}" \
             -Pandroid.injected.signing.key.alias="${KEY_ALIAS}" \
             -Pandroid.injected.signing.key.password="${KEY_PASSWORD}"
