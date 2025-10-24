@@ -33,13 +33,11 @@ jobs:
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
 
-      - name: Decode keystore from secret
-        run: |
-          echo "KEYSTORE_BASE64" | base64 --decode > ./my-release-key.keystore
-          ls -l my-release-key.keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-
+      - name: Decode keystore from Base64
+  run: echo "$KEYSTORE_BASE64" | base64 --decode > ./my-release-key.keystore
+  env:
+    KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+    
       - name: Clean
         run: ./gradlew clean
 
