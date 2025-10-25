@@ -253,16 +253,17 @@ fun scheduleCache(context: Context, mediaItem: MediaItem) {
         .setData(mediaItem.mediaId.encodeToByteArray())
         .build()
 
-    transaction {
+    // Gunakan coroutineScope biar aman panggil suspend function di thread background
+    coroutineScope.launch {
         runCatching {
-            // Cek apakah lagu sudah ada di database
-            val existingSong = Database.instance.getSongById(mediaItem.mediaId)
+            // Gunakan runBlocking untuk memanggil suspend function di context coroutine
+            val existingSong = runBlocking { Database.instance.getSongById(mediaItem.mediaId) }
 
-            // Kalau belum ada, baru insert
             if (existingSong == null) {
+                // Insert baru
                 Database.instance.insert(mediaItem)
             } else {
-                // Kalau sudah ada (misalnya favorite), pakai upsert agar tidak menghapus likedAt
+                // Upsert dengan mempertahankan likedAt dan data lama
                 val preservedSong = existingSong.copy(
                     title = mediaItem.mediaMetadata.title?.toString() ?: existingSong.title,
                     artistsText = mediaItem.mediaMetadata.artist?.toString() ?: existingSong.artistsText,
@@ -272,13 +273,8 @@ fun scheduleCache(context: Context, mediaItem: MediaItem) {
                 )
                 Database.instance.upsert(preservedSong)
             }
-        }.onFailure {
-            it.printStackTrace()
-            context.toast(context.getString(R.string.error_pre_cache))
-            return@transaction
-        }
 
-        coroutineScope.launch {
+            // Jalankan proses download-nya
             val result = context.download<PrecacheService>(downloadRequest)
             if (result.isFailure) {
                 result.exceptionOrNull()?.printStackTrace()
@@ -286,8 +282,13 @@ fun scheduleCache(context: Context, mediaItem: MediaItem) {
             } else {
                 context.toast(context.getString(R.string.downloading))
             }
+        }.onFailure {
+            it.printStackTrace()
+            context.toast(context.getString(R.string.error_pre_cache))
         }
     }
+}
+}
 }
 
 @Suppress("TooManyFunctions")
