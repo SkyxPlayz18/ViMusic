@@ -284,12 +284,7 @@ class PrecacheService : DownloadService(
     }
 }
 
-@Suppress("TooManyFunctions")
-@OptIn(UnstableApi::class)
-class BlockingDeferredCache(private val cache: Deferred<Cache>) : Cache {
-    constructor(init: suspend () -> Cache) : this(coroutineScope.async { init() })
-
-    private fun isPlayerServiceBound(context: Context): Boolean {
+private fun isPlayerServiceBound(context: Context): Boolean {
     return try {
         val intent = intent<PlayerService>()
         val resolveInfo = context.packageManager.queryIntentServices(intent, 0)
@@ -297,7 +292,12 @@ class BlockingDeferredCache(private val cache: Deferred<Cache>) : Cache {
     } catch (e: Exception) {
         false
     }
-    }
+}
+
+@Suppress("TooManyFunctions")
+@OptIn(UnstableApi::class)
+class BlockingDeferredCache(private val cache: Deferred<Cache>) : Cache {
+    constructor(init: suspend () -> Cache) : this(coroutineScope.async { init() })
 
     private val resolvedCache by lazy { runBlocking { cache.await() } }
 
