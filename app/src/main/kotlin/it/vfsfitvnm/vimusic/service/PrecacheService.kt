@@ -241,55 +241,51 @@ class PrecacheService : DownloadService(
 
     companion object {
     @SuppressLint("UseKtx")
-fun scheduleCache(context: Context, mediaItem: MediaItem) {
-    if (mediaItem.isLocal) return
+    fun scheduleCache(context: Context, mediaItem: MediaItem) {
+        if (mediaItem.isLocal) return
 
-    val downloadRequest = DownloadRequest
-        .Builder(
-            /* id      = */ mediaItem.mediaId,
-            /* uri     = */ mediaItem.requestMetadata.mediaUri
-                ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
-        )
-        .setCustomCacheKey(mediaItem.mediaId)
-        .setData(mediaItem.mediaId.encodeToByteArray())
-        .build()
+        val downloadRequest = DownloadRequest
+            .Builder(
+                mediaItem.mediaId,
+                mediaItem.requestMetadata.mediaUri
+                    ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
+            )
+            .setCustomCacheKey(mediaItem.mediaId)
+            .setData(mediaItem.mediaId.encodeToByteArray())
+            .build()
 
-    // Gunakan coroutineScope biar aman panggil suspend function di thread background
-    coroutineScope.launch {
-        runCatching {
-            // Gunakan runBlocking untuk memanggil suspend function di context coroutine
-            val existingSong = runBlocking { Database.instance.getSongById(mediaItem.mediaId) }
+        coroutineScope.launch {
+            try {
+                val existingSong = Database.instance.getSongById(mediaItem.mediaId)
 
-            if (existingSong == null) {
-                // Insert baru
-                Database.instance.insert(mediaItem)
-            } else {
-                // Upsert dengan mempertahankan likedAt dan data lama
-                val preservedSong = existingSong.copy(
-                    title = mediaItem.mediaMetadata.title?.toString() ?: existingSong.title,
-                    artistsText = mediaItem.mediaMetadata.artist?.toString() ?: existingSong.artistsText,
-                    durationText = mediaItem.mediaMetadata.extras?.getString("durationText") ?: existingSong.durationText,
-                    thumbnailUrl = mediaItem.mediaMetadata.artworkUri?.toString() ?: existingSong.thumbnailUrl,
-                    album = mediaItem.mediaMetadata.albumTitle?.toString() ?: existingSong.album
-                )
-                Database.instance.upsert(preservedSong)
+                if (existingSong == null) {
+                    Database.instance.insert(mediaItem)
+                } else {
+                    val updatedSong = existingSong.copy(
+                        title = mediaItem.mediaMetadata.title?.toString() ?: existingSong.title,
+                        artistsText = mediaItem.mediaMetadata.artist?.toString() ?: existingSong.artistsText,
+                        durationText = mediaItem.mediaMetadata.extras?.getString("durationText") ?: existingSong.durationText,
+                        thumbnailUrl = mediaItem.mediaMetadata.artworkUri?.toString() ?: existingSong.thumbnailUrl,
+                        album = mediaItem.mediaMetadata.albumTitle?.toString() ?: existingSong.album
+                    )
+                    Database.instance.upsert(updatedSong)
+                }
+
+                val result = context.download<PrecacheService>(downloadRequest)
+                result.exceptionOrNull()?.let {
+                    if (it !is CancellationException) {
+                        it.printStackTrace()
+                        context.toast(context.getString(R.string.error_pre_cache))
+                    }
+                } ?: context.toast(context.getString(R.string.downloading))
+            } catch (e: Exception) {
+                if (e !is CancellationException) {
+                    e.printStackTrace()
+                    context.toast(context.getString(R.string.error_pre_cache))
+                }
             }
-
-            // Jalankan proses download-nya
-            val result = context.download<PrecacheService>(downloadRequest)
-            if (result.isFailure) {
-                result.exceptionOrNull()?.printStackTrace()
-                context.toast(context.getString(R.string.error_pre_cache))
-            } else {
-                context.toast(context.getString(R.string.downloading))
-            }
-        }.onFailure {
-            it.printStackTrace()
-            context.toast(context.getString(R.string.error_pre_cache))
         }
     }
-}
-}
 }
 
 @Suppress("TooManyFunctions")
