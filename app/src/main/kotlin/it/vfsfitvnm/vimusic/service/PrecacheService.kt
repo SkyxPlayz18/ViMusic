@@ -147,13 +147,23 @@ class PrecacheService : DownloadService(
         }
 
         val cache = BlockingDeferredCache {
-            suspendCoroutine {
-                waiters += { it.resume(Unit) }
-            }
-            binder?.cache ?: run {
-                toast(getString(R.string.error_pre_cache))
-                error("PlayerService failed to start, crashing...")
-            }
+    // Pastikan PlayerService sudah benar-benar terhubung
+    suspendCoroutine { cont ->
+        if (bound && binder != null) cont.resume(Unit)
+        else waiters += { cont.resume(Unit) }
+    }
+
+    // Tunggu beberapa detik jika masih null (buat safety)
+    var retryCount = 0
+    while (binder == null && retryCount < 10) {
+        kotlinx.coroutines.delay(200)
+        retryCount++
+    }
+
+    binder?.cache ?: run {
+        toast(getString(R.string.error_pre_cache))
+        error("PlayerService binder is null, cannot access cache")
+    }
         }
 
         progressUpdaterJob?.cancel()
