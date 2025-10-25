@@ -249,16 +249,6 @@ class PrecacheService : DownloadService(
     return
             }
 
-            private fun isPlayerServiceBound(context: Context): Boolean {
-    return try {
-        val intent = intent<PlayerService>()
-        val resolveInfo = context.packageManager.queryIntentServices(intent, 0)
-        !resolveInfo.isNullOrEmpty()
-    } catch (e: Exception) {
-        false
-    }
-            }
-
             val downloadRequest = DownloadRequest
                 .Builder(
                     /* id      = */ mediaItem.mediaId,
@@ -298,6 +288,16 @@ class PrecacheService : DownloadService(
 @OptIn(UnstableApi::class)
 class BlockingDeferredCache(private val cache: Deferred<Cache>) : Cache {
     constructor(init: suspend () -> Cache) : this(coroutineScope.async { init() })
+
+    private fun isPlayerServiceBound(context: Context): Boolean {
+    return try {
+        val intent = intent<PlayerService>()
+        val resolveInfo = context.packageManager.queryIntentServices(intent, 0)
+        !resolveInfo.isNullOrEmpty()
+    } catch (e: Exception) {
+        false
+    }
+    }
 
     private val resolvedCache by lazy { runBlocking { cache.await() } }
 
