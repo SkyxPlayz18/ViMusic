@@ -7,6 +7,7 @@ import android.content.ServiceConnection
 import android.os.IBinder
 import androidx.annotation.OptIn
 import androidx.core.app.NotificationCompat
+import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.cache.Cache
@@ -29,7 +30,6 @@ import it.vfsfitvnm.vimusic.utils.toast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -49,7 +49,6 @@ import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import kotlin.time.Duration.Companion.milliseconds
-import androidx.core.net.toUri
 
 private val executor = Executors.newCachedThreadPool()
 private val coroutineScope = CoroutineScope(
@@ -58,33 +57,28 @@ private val coroutineScope = CoroutineScope(
         CoroutineName("PrecacheService-Worker-Scope")
 )
 
-// While the class is not a singleton (lifecycle), there should only be one download state at a time
 private val mutableDownloadState = MutableStateFlow(false)
 val downloadState = mutableDownloadState.asStateFlow()
 
-private const val DOWNLOAD_NOTIFICATION_UPDATE_INTERVAL = 1000L // default
+private const val DOWNLOAD_NOTIFICATION_UPDATE_INTERVAL = 1000L
 private const val DOWNLOAD_WORK_NAME = "precacher-work"
 
 @OptIn(UnstableApi::class)
 class PrecacheService : DownloadService(
-    /* foregroundNotificationId             = */ ServiceNotifications.download.notificationId!!,
-    /* foregroundNotificationUpdateInterval = */ DOWNLOAD_NOTIFICATION_UPDATE_INTERVAL,
-    /* channelId                            = */ ServiceNotifications.download.id,
-    /* channelNameResourceId                = */ R.string.pre_cache,
-    /* channelDescriptionResourceId         = */ 0
+    ServiceNotifications.download.notificationId!!,
+    DOWNLOAD_NOTIFICATION_UPDATE_INTERVAL,
+    ServiceNotifications.download.id,
+    R.string.pre_cache,
+    0
 ) {
     private val downloadQueue =
         Channel<DownloadManager>(onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     private val downloadNotificationHelper by lazy {
-        DownloadNotificationHelper(
-            /* context = */ this,
-            /* channelId = */ ServiceNotifications.download.id
-        )
+        DownloadNotificationHelper(this, ServiceNotifications.download.id)
     }
 
     private val notificationActionReceiver = NotificationActionReceiver()
-
     private val waiters = mutableListOf<() -> Unit>()
 
     private val serviceConnection = object : ServiceConnection {
@@ -107,17 +101,9 @@ class PrecacheService : DownloadService(
     inner class NotificationActionReceiver : ActionReceiver("it.vfsfitvnm.vimusic.precache") {
         val cancel by action { context, _ ->
             runCatching {
-                sendPauseDownloads(
-                    /* context         = */ context,
-                    /* clazz           = */ PrecacheService::class.java,
-                    /* foreground      = */ true
-                )
+                sendPauseDownloads(context, PrecacheService::class.java, true)
             }.recoverCatching {
-                sendPauseDownloads(
-                    /* context         = */ context,
-                    /* clazz           = */ PrecacheService::class.java,
-                    /* foreground      = */ false
-                )
+                sendPauseDownloads(context, PrecacheService::class.java, false)
             }
         }
     }
@@ -131,12 +117,11 @@ class PrecacheService : DownloadService(
 
     override fun onCreate() {
         super.onCreate()
-
         notificationActionReceiver.register()
         mutableDownloadState.update { false }
     }
 
-    @kotlin.OptIn(FlowPreview::class)
+    @OptIn(FlowPreview::class)
     override fun getDownloadManager(): DownloadManager {
         runCatching {
             if (bound) unbindService(serviceConnection)
@@ -167,37 +152,31 @@ class PrecacheService : DownloadService(
         }
 
         return DownloadManager(
-            /* context = */ this,
-            /* databaseProvider = */ PlayerService.createDatabaseProvider(this),
-            /* cache = */ cache,
-            /* upstreamFactory = */ PlayerService.createYouTubeDataSourceResolverFactory(
-                context = this,
-                cache = cache,
-                chunkLength = null
-            ),
-            /* executor = */ executor
+            this,
+            PlayerService.createDatabaseProvider(this),
+            cache,
+            PlayerService.createYouTubeDataSourceResolverFactory(this, cache, null),
+            executor
         ).apply {
             maxParallelDownloads = 3
             minRetryCount = 1
             requirements = Requirements(Requirements.NETWORK)
 
-            addListener(
-                object : DownloadManager.Listener {
-                    override fun onIdle(downloadManager: DownloadManager) =
-                        mutableDownloadState.update { false }
+            addListener(object : DownloadManager.Listener {
+                override fun onIdle(downloadManager: DownloadManager) =
+                    mutableDownloadState.update { false }
 
-                    override fun onDownloadChanged(
-                        downloadManager: DownloadManager,
-                        download: Download,
-                        finalException: Exception?
-                    ) = downloadQueue.trySend(downloadManager).let { }
+                override fun onDownloadChanged(
+                    downloadManager: DownloadManager,
+                    download: Download,
+                    finalException: Exception?
+                ) = downloadQueue.trySend(downloadManager).let { }
 
-                    override fun onDownloadRemoved(
-                        downloadManager: DownloadManager,
-                        download: Download
-                    ) = downloadQueue.trySend(downloadManager).let { }
-                }
-            )
+                override fun onDownloadRemoved(
+                    downloadManager: DownloadManager,
+                    download: Download
+                ) = downloadQueue.trySend(downloadManager).let { }
+            })
         }
     }
 
@@ -206,35 +185,26 @@ class PrecacheService : DownloadService(
     override fun getForegroundNotification(
         downloads: MutableList<Download>,
         notMetRequirements: Int
-    ) = NotificationCompat
-        .Builder(
-            /* context = */ this,
-            /* notification = */ downloadNotificationHelper.buildProgressNotification(
-                /* context            = */ this,
-                /* smallIcon          = */ R.drawable.download,
-                /* contentIntent      = */ null,
-                /* message            = */ null,
-                /* downloads          = */ downloads,
-                /* notMetRequirements = */ notMetRequirements
-            )
-        )
-        .setChannelId(ServiceNotifications.download.id)
+    ) = NotificationCompat.Builder(
+        this,
+        ServiceNotifications.download.id
+    )
+        .setSmallIcon(R.drawable.download)
+        .setContentTitle(getString(R.string.pre_cache))
+        .setContentText(getString(R.string.downloading))
+        .setProgress(0, 0, true)
         .addAction(
             NotificationCompat.Action.Builder(
-                /* icon = */ R.drawable.close,
-                /* title = */ getString(R.string.cancel),
-                /* intent = */ notificationActionReceiver.cancel.pendingIntent
+                R.drawable.close,
+                getString(R.string.cancel),
+                notificationActionReceiver.cancel.pendingIntent
             ).build()
         )
         .build()
 
     override fun onDestroy() {
         super.onDestroy()
-
-        runCatching {
-            if (bound) unbindService(serviceConnection)
-        }
-
+        runCatching { if (bound) unbindService(serviceConnection) }
         unregisterReceiver(notificationActionReceiver)
         mutableDownloadState.update { false }
     }
@@ -244,37 +214,23 @@ class PrecacheService : DownloadService(
         fun scheduleCache(context: Context, mediaItem: MediaItem) {
             if (mediaItem.isLocal) return
 
-            if (!isPlayerServiceBound(context)) {
-    context.toast("Player is not ready yet. Please try again in a few seconds.")
-    return
-            }
-
-            val downloadRequest = DownloadRequest
-                .Builder(
-                    /* id      = */ mediaItem.mediaId,
-                    /* uri     = */ mediaItem.requestMetadata.mediaUri
-                        ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
-                )
+            val downloadRequest = DownloadRequest.Builder(
+                mediaItem.mediaId,
+                mediaItem.requestMetadata.mediaUri
+                    ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
+            )
                 .setCustomCacheKey(mediaItem.mediaId)
                 .setData(mediaItem.mediaId.encodeToByteArray())
                 .build()
 
             transaction {
-    runCatching {
-        if (Database.instance.exists(mediaItem.mediaId)) {
-            // jangan insert ulang, biarkan data lama
-        } else {
-            Database.instance.insert(mediaItem)
-        }
-    }.onFailure {
-        it.printStackTrace()
-    }
-            }
+                runCatching {
+                    Database.instance.insert(mediaItem)
+                }.also { if (it.isFailure) return@transaction }
 
                 coroutineScope.launch {
                     context.download<PrecacheService>(downloadRequest).exceptionOrNull()?.let {
                         if (it is CancellationException) throw it
-
                         it.printStackTrace()
                         context.toast(context.getString(R.string.error_pre_cache))
                     }
@@ -284,58 +240,38 @@ class PrecacheService : DownloadService(
     }
 }
 
-private fun isPlayerServiceBound(context: Context): Boolean {
-    return try {
-        val intent = intent<PlayerService>()
-        val resolveInfo = context.packageManager.queryIntentServices(intent, 0)
-        !resolveInfo.isNullOrEmpty()
-    } catch (e: Exception) {
-        false
-    }
-}
-
 @Suppress("TooManyFunctions")
 @OptIn(UnstableApi::class)
-class BlockingDeferredCache(private val cache: Deferred<Cache>) : Cache {
+class BlockingDeferredCache(private val cache: kotlinx.coroutines.Deferred<Cache>) : Cache {
     constructor(init: suspend () -> Cache) : this(coroutineScope.async { init() })
-
     private val resolvedCache by lazy { runBlocking { cache.await() } }
 
     override fun getUid() = resolvedCache.uid
     override fun release() = resolvedCache.release()
     override fun addListener(key: String, listener: Cache.Listener) =
         resolvedCache.addListener(key, listener)
-
     override fun removeListener(key: String, listener: Cache.Listener) =
         resolvedCache.removeListener(key, listener)
-
     override fun getCachedSpans(key: String) = resolvedCache.getCachedSpans(key)
     override fun getKeys(): MutableSet<String> = resolvedCache.keys
     override fun getCacheSpace() = resolvedCache.cacheSpace
     override fun startReadWrite(key: String, position: Long, length: Long) =
         resolvedCache.startReadWrite(key, position, length)
-
     override fun startReadWriteNonBlocking(key: String, position: Long, length: Long) =
         resolvedCache.startReadWriteNonBlocking(key, position, length)
-
     override fun startFile(key: String, position: Long, length: Long) =
         resolvedCache.startFile(key, position, length)
-
     override fun commitFile(file: File, length: Long) = resolvedCache.commitFile(file, length)
     override fun releaseHoleSpan(holeSpan: CacheSpan) = resolvedCache.releaseHoleSpan(holeSpan)
     override fun removeResource(key: String) = resolvedCache.removeResource(key)
     override fun removeSpan(span: CacheSpan) = resolvedCache.removeSpan(span)
     override fun isCached(key: String, position: Long, length: Long) =
         resolvedCache.isCached(key, position, length)
-
     override fun getCachedLength(key: String, position: Long, length: Long) =
         resolvedCache.getCachedLength(key, position, length)
-
     override fun getCachedBytes(key: String, position: Long, length: Long) =
         resolvedCache.getCachedBytes(key, position, length)
-
     override fun applyContentMetadataMutations(key: String, mutations: ContentMetadataMutations) =
         resolvedCache.applyContentMetadataMutations(key, mutations)
-
     override fun getContentMetadata(key: String) = resolvedCache.getContentMetadata(key)
 }
