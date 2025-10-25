@@ -286,6 +286,7 @@ class PrecacheService : DownloadService(
             }
         }
     }
+    }
 
 @Suppress("TooManyFunctions")
 @OptIn(UnstableApi::class)
