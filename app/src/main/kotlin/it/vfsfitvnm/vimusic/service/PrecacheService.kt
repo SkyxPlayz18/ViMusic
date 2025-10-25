@@ -244,6 +244,21 @@ class PrecacheService : DownloadService(
         fun scheduleCache(context: Context, mediaItem: MediaItem) {
             if (mediaItem.isLocal) return
 
+            if (!isPlayerServiceBound(context)) {
+    context.toast("Player is not ready yet. Please try again in a few seconds.")
+    return
+            }
+
+            private fun isPlayerServiceBound(context: Context): Boolean {
+    return try {
+        val intent = intent<PlayerService>()
+        val resolveInfo = context.packageManager.queryIntentServices(intent, 0)
+        !resolveInfo.isNullOrEmpty()
+    } catch (e: Exception) {
+        false
+    }
+            }
+
             val downloadRequest = DownloadRequest
                 .Builder(
                     /* id      = */ mediaItem.mediaId,
@@ -255,9 +270,16 @@ class PrecacheService : DownloadService(
                 .build()
 
             transaction {
-                runCatching {
-                    Database.instance.insert(mediaItem)
-                }.also { if (it.isFailure) return@transaction }
+    runCatching {
+        if (Database.instance.exists(mediaItem.mediaId)) {
+            // jangan insert ulang, biarkan data lama
+        } else {
+            Database.instance.insert(mediaItem)
+        }
+    }.onFailure {
+        it.printStackTrace()
+    }
+            }
 
                 coroutineScope.launch {
                     context.download<PrecacheService>(downloadRequest).exceptionOrNull()?.let {
