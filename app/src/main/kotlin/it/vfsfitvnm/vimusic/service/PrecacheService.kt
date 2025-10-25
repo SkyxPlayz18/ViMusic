@@ -239,6 +239,7 @@ class PrecacheService : DownloadService(
         mutableDownloadState.update { false }
     }
 
+    companion object {
     @SuppressLint("UseKtx")
 fun scheduleCache(context: Context, mediaItem: MediaItem) {
     if (mediaItem.isLocal) return
