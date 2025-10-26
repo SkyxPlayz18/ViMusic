@@ -241,41 +241,35 @@ class PrecacheService : DownloadService(
 
     companion object {
         @SuppressLint("UseKtx")
-fun scheduleCache(context: Context, mediaItem: MediaItem) {
-    if (mediaItem.isLocal) return
+        fun scheduleCache(context: Context, mediaItem: MediaItem) {
+            if (mediaItem.isLocal) return
 
-    val downloadRequest = DownloadRequest
-        .Builder(
-            mediaItem.mediaId,
-            mediaItem.requestMetadata.mediaUri
-                ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
-        )
-        .setCustomCacheKey(mediaItem.mediaId)
-        .setData(mediaItem.mediaId.encodeToByteArray())
-        .build()
+            val downloadRequest = DownloadRequest
+                .Builder(
+                    /* id      = */ mediaItem.mediaId,
+                    /* uri     = */ mediaItem.requestMetadata.mediaUri
+                        ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
+                )
+                .setCustomCacheKey(mediaItem.mediaId)
+                .setData(mediaItem.mediaId.encodeToByteArray())
+                .build()
 
-    // 🔹 Jalankan semuanya di coroutine
-    coroutineScope.launch {
-        runCatching {
-            // Masuk transaction juga bisa suspend kalau perlu
-            Database.instance.insert(mediaItem)
-        }.onFailure {
-            it.printStackTrace()
-            context.toast(context.getString(R.string.error_pre_cache))
-            return@launch
-        }
+            transaction {
+                runCatching {
+                    Database.instance.insert(mediaItem)
+                }.also { if (it.isFailure) return@transaction }
 
-        // 🔹 Mulai download
-        context.download<PrecacheService>(downloadRequest).exceptionOrNull()?.let {
-            if (it is CancellationException) throw it
+                coroutineScope.launch {
+                    context.download<PrecacheService>(downloadRequest).exceptionOrNull()?.let {
+                        if (it is CancellationException) throw it
 
-            it.printStackTrace()
-            context.toast(context.getString(R.string.error_pre_cache))
+                        it.printStackTrace()
+                        context.toast(context.getString(R.string.error_pre_cache))
+                    }
+                }
+            }
         }
     }
-}
-    }
-}
 }
 
 @Suppress("TooManyFunctions")
