@@ -60,6 +60,7 @@ import it.vfsfitvnm.core.data.enums.SortOrder
 import it.vfsfitvnm.core.ui.utils.songBundle
 import io.ktor.http.Url
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.runBlocking
 
 @Dao
 @Suppress("TooManyFunctions")
