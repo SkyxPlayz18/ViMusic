@@ -826,45 +826,54 @@ suspend fun updateSongMetadata(
 )
 
     @Transaction
-    fun insert(mediaItem: MediaItem, block: (Song) -> Song = { it }) {
-        val extras = mediaItem.mediaMetadata.extras?.songBundle
-        val song = Song(
-            id = mediaItem.mediaId,
-            title = mediaItem.mediaMetadata.title?.toString().orEmpty(),
-            artistsText = mediaItem.mediaMetadata.artist?.toString(),
-            durationText = extras?.durationText,
-            thumbnailUrl = mediaItem.mediaMetadata.artworkUri?.toString(),
-            explicit = extras?.explicit == true
-        ).let(block)
+fun insert(mediaItem: MediaItem, block: (Song) -> Song = { it }) {
+    val extras = mediaItem.mediaMetadata.extras?.songBundle
 
-        upsert(song) // Use the new upsert method
+    // Cek dulu apakah lagu udah ada di DB
+    val existingSong = getSongById(mediaItem.mediaId)
 
-        extras?.albumId?.let { albumId ->
-            insert(
-                Album(id = albumId, title = mediaItem.mediaMetadata.albumTitle?.toString()),
-                SongAlbumMap(songId = song.id, albumId = albumId, position = null)
+    val song = Song(
+        id = mediaItem.mediaId,
+        title = mediaItem.mediaMetadata.title?.toString().orEmpty(),
+        artistsText = mediaItem.mediaMetadata.artist?.toString(),
+        durationText = extras?.durationText,
+        thumbnailUrl = mediaItem.mediaMetadata.artworkUri?.toString(),
+        explicit = extras?.explicit == true,
+        // Jaga likedAt supaya gak ilang
+        likedAt = existingSong?.likedAt,
+        // Jaga blacklisted & totalPlayTimeMs biar gak reset
+        blacklisted = existingSong?.blacklisted ?: false,
+        totalPlayTimeMs = existingSong?.totalPlayTimeMs ?: 0
+    ).let(block)
+
+    upsert(song)
+
+    extras?.albumId?.let { albumId ->
+        insert(
+            Album(id = albumId, title = mediaItem.mediaMetadata.albumTitle?.toString()),
+            SongAlbumMap(songId = song.id, albumId = albumId, position = null)
+        )
+    }
+
+    extras?.artistNames?.let { artistNames ->
+        extras.artistIds?.let { artistIds ->
+            if (artistNames.size == artistIds.size) insert(
+                artistNames.mapIndexed { index, artistName ->
+                    Artist(
+                        id = artistIds[index],
+                        name = artistName
+                    )
+                },
+                artistIds.map { artistId ->
+                    SongArtistMap(
+                        songId = song.id,
+                        artistId = artistId
+                    )
+                }
             )
         }
-
-        extras?.artistNames?.let { artistNames ->
-            extras.artistIds?.let { artistIds ->
-                if (artistNames.size == artistIds.size) insert(
-                    artistNames.mapIndexed { index, artistName ->
-                        Artist(
-                            id = artistIds[index],
-                            name = artistName
-                        )
-                    },
-                    artistIds.map { artistId ->
-                        SongArtistMap(
-                            songId = song.id,
-                            artistId = artistId
-                        )
-                    }
-                )
-            }
-        }
     }
+}
 
     @Transaction
 fun insertPreserve(mediaItem: MediaItem, block: (Song) -> Song = { it }) {
