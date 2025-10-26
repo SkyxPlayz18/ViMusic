@@ -865,6 +865,54 @@ suspend fun updateSongMetadata(
         }
     }
 
+    @Transaction
+fun insertPreserve(mediaItem: MediaItem, block: (Song) -> Song = { it }) {
+    val extras = mediaItem.mediaMetadata.extras?.songBundle
+    val existing: Song? = runBlocking { getSongById(mediaItem.mediaId) }
+
+    val built = Song(
+        id = mediaItem.mediaId,
+        title = mediaItem.mediaMetadata.title?.toString().orEmpty(),
+        artistsText = mediaItem.mediaMetadata.artist?.toString(),
+        durationText = extras?.durationText ?: mediaItem.mediaMetadata.extras?.getString("durationText"),
+        thumbnailUrl = mediaItem.mediaMetadata.artworkUri?.toString(),
+        album = mediaItem.mediaMetadata.albumTitle?.toString(),
+        likedAt = existing?.likedAt,
+        totalPlayTimeMs = existing?.totalPlayTimeMs ?: 0L,
+        loudnessBoost = existing?.loudnessBoost,
+        blacklisted = existing?.blacklisted ?: false,
+        explicit = extras?.explicit == true || existing?.explicit == true
+    ).let(block)
+
+    upsert(built)
+
+    extras?.albumId?.let { albumId ->
+        insert(
+            Album(id = albumId, title = mediaItem.mediaMetadata.albumTitle?.toString()),
+            SongAlbumMap(songId = built.id, albumId = albumId, position = null)
+        )
+    }
+
+    extras?.artistNames?.let { artistNames ->
+        extras.artistIds?.let { artistIds ->
+            if (artistNames.size == artistIds.size) insert(
+                artistNames.mapIndexed { index, artistName ->
+                    Artist(
+                        id = artistIds[index],
+                        name = artistName
+                    )
+                },
+                artistIds.map { artistId ->
+                    SongArtistMap(
+                        songId = built.id,
+                        artistId = artistId
+                    )
+                }
+            )
+        }
+    }
+}
+
     @Update
     fun update(artist: Artist)
 
