@@ -147,25 +147,13 @@ class PrecacheService : DownloadService(
         }
 
         val cache = BlockingDeferredCache {
-    repeat(15) { // total 3 detik retry
-        if (bound && binder != null) return@BlockingDeferredCache binder!!.cache
-        kotlinx.coroutines.delay(200)
-    }
-    toast(getString(R.string.error_pre_cache))
-    error("PlayerService binder is null after retries")
-        }
-
-    // Tunggu beberapa detik jika masih null (buat safety)
-    var retryCount = 0
-    while (binder == null && retryCount < 10) {
-        kotlinx.coroutines.delay(200)
-        retryCount++
-    }
-
-    binder?.cache ?: run {
-        toast(getString(R.string.error_pre_cache))
-        error("PlayerService binder is null, cannot access cache")
-    }
+            suspendCoroutine {
+                waiters += { it.resume(Unit) }
+            }
+            binder?.cache ?: run {
+                toast(getString(R.string.error_pre_cache))
+                error("PlayerService failed to start, crashing...")
+            }
         }
 
         progressUpdaterJob?.cancel()
@@ -253,47 +241,33 @@ class PrecacheService : DownloadService(
 
     companion object {
         @SuppressLint("UseKtx")
-fun scheduleCache(context: Context, mediaItem: MediaItem) {
-    if (mediaItem.isLocal) return
+        fun scheduleCache(context: Context, mediaItem: MediaItem) {
+            if (mediaItem.isLocal) return
 
-    val videoId = mediaItem.mediaId
-    val mediaUri = mediaItem.requestMetadata.mediaUri
-        ?: "https://youtube.com/watch?v=$videoId".toUri()
+            val downloadRequest = DownloadRequest
+                .Builder(
+                    /* id      = */ mediaItem.mediaId,
+                    /* uri     = */ mediaItem.requestMetadata.mediaUri
+                        ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
+                )
+                .setCustomCacheKey(mediaItem.mediaId)
+                .setData(mediaItem.mediaId.encodeToByteArray())
+                .build()
 
-    // Pastikan mediaId bukan kosong/null
-    if (videoId.isBlank()) {
-        context.toast("Gagal: mediaId kosong")
-        return
-    }
+            transaction {
+                runCatching {
+                    Database.instance.insert(mediaItem)
+                }.also { if (it.isFailure) return@transaction }
 
-    val downloadRequest = DownloadRequest.Builder(videoId, mediaUri)
-        .setCustomCacheKey(videoId)
-        .setData(videoId.encodeToByteArray())
-        .build()
+                coroutineScope.launch {
+                    context.download<PrecacheService>(downloadRequest).exceptionOrNull()?.let {
+                        if (it is CancellationException) throw it
 
-    transaction {
-        runCatching {
-            // Insert song data kalau belum ada
-            val song = Database.instance.getSongById(videoId)
-            if (song == null) {
-                Database.instance.insert(mediaItem.toSong())
+                        it.printStackTrace()
+                        context.toast(context.getString(R.string.error_pre_cache))
+                    }
+                }
             }
-        }.onFailure {
-            it.printStackTrace()
-        }
-    }
-
-    coroutineScope.launch {
-        val result = context.download<PrecacheService>(downloadRequest)
-        val error = result.exceptionOrNull()
-
-        if (error != null) {
-            if (error is CancellationException) return@launch
-            error.printStackTrace()
-            context.toast(context.getString(R.string.error_pre_cache))
-        } else {
-            // sukses di-precache
-            context.toast("Lagu berhasil dijadwalkan untuk download")
         }
     }
 }
