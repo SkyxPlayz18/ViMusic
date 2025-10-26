@@ -826,7 +826,7 @@ suspend fun updateSongMetadata(
 )
 
     @Transaction
-fun insert(mediaItem: MediaItem, block: (Song) -> Song = { it }) {
+suspend fun insert(mediaItem: MediaItem, block: (Song) -> Song = { it }) {
     val extras = mediaItem.mediaMetadata.extras?.songBundle
 
     // Cek dulu apakah lagu udah ada di DB
