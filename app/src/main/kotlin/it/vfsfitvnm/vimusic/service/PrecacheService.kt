@@ -155,69 +155,76 @@ class PrecacheService : DownloadService(
     }
 
     @kotlin.OptIn(FlowPreview::class)
-    override fun getDownloadManager(): DownloadManager {
-        runCatching {
-            if (bound) unbindService(serviceConnection)
-            bindService(intent<PlayerService>(), serviceConnection, BIND_AUTO_CREATE)
-        }.exceptionOrNull()?.let {
-            it.printStackTrace()
+    @OptIn(FlowPreview::class)
+override fun getDownloadManager(): DownloadManager {
+    logDebug(this, "getDownloadManager() dipanggil")
+
+    runCatching {
+        if (bound) {
+            logDebug(this, "Service sebelumnya bound, unbind dulu")
+            unbindService(serviceConnection)
+        }
+        bindService(intent<PlayerService>(), serviceConnection, BIND_AUTO_CREATE)
+        logDebug(this, "Berhasil bind ke PlayerService")
+    }.exceptionOrNull()?.let {
+        logDebug(this, "Gagal bind service: ${it.stackTraceToString()}")
+        toast(getString(R.string.error_pre_cache))
+    }
+
+    val cache = BlockingDeferredCache {
+        suspendCoroutine { cont ->
+            waiters += { cont.resume(Unit) }
+        }
+        logDebug(this@PrecacheService, "Menunggu binder PlayerService...")
+        binder?.cache ?: run {
+            logDebug(this@PrecacheService, "PlayerService binder NULL saat ambil cache")
             toast(getString(R.string.error_pre_cache))
-        }
-
-        val cache = BlockingDeferredCache {
-            suspendCoroutine {
-                waiters += { it.resume(Unit) }
-            }
-            binder?.cache ?: run {
-                toast(getString(R.string.error_pre_cache))
-                error("PlayerService failed to start, crashing...")
-            }
-        }
-
-        progressUpdaterJob?.cancel()
-        progressUpdaterJob = coroutineScope.launch {
-            downloadQueue
-                .receiveAsFlow()
-                .debounce(100.milliseconds)
-                .collect { downloadManager ->
-                    mutableDownloadState.update { !downloadManager.isIdle }
-                }
-        }
-
-        return DownloadManager(
-            /* context = */ this,
-            /* databaseProvider = */ PlayerService.createDatabaseProvider(this),
-            /* cache = */ cache,
-            /* upstreamFactory = */ PlayerService.createYouTubeDataSourceResolverFactory(
-                context = this,
-                cache = cache,
-                chunkLength = null
-            ),
-            /* executor = */ executor
-        ).apply {
-            maxParallelDownloads = 3
-            minRetryCount = 1
-            requirements = Requirements(Requirements.NETWORK)
-
-            addListener(
-                object : DownloadManager.Listener {
-                    override fun onIdle(downloadManager: DownloadManager) =
-                        mutableDownloadState.update { false }
-
-                    override fun onDownloadChanged(
-                        downloadManager: DownloadManager,
-                        download: Download,
-                        finalException: Exception?
-                    ) = downloadQueue.trySend(downloadManager).let { }
-
-                    override fun onDownloadRemoved(
-                        downloadManager: DownloadManager,
-                        download: Download
-                    ) = downloadQueue.trySend(downloadManager).let { }
-                }
-            )
+            error("PlayerService failed to start, binder null")
         }
     }
+
+    progressUpdaterJob?.cancel()
+    progressUpdaterJob = coroutineScope.launch {
+        logDebug(this@PrecacheService, "ProgressUpdaterJob mulai jalan")
+        downloadQueue
+            .receiveAsFlow()
+            .debounce(100.milliseconds)
+            .collect { downloadManager ->
+                mutableDownloadState.update { !downloadManager.isIdle }
+            }
+    }
+
+    logDebug(this, "DownloadManager berhasil dibuat")
+    return DownloadManager(
+        this,
+        PlayerService.createDatabaseProvider(this),
+        cache,
+        PlayerService.createYouTubeDataSourceResolverFactory(this, cache, null),
+        executor
+    ).apply {
+        maxParallelDownloads = 3
+        minRetryCount = 1
+        requirements = Requirements(Requirements.NETWORK)
+        addListener(object : DownloadManager.Listener {
+            override fun onIdle(downloadManager: DownloadManager) {
+                logDebug(this@PrecacheService, "DownloadManager idle")
+                mutableDownloadState.update { false }
+            }
+            override fun onDownloadChanged(
+                downloadManager: DownloadManager,
+                download: Download,
+                finalException: Exception?
+            ) {
+                logDebug(this@PrecacheService, "onDownloadChanged: ${download.request.id}, state=${download.state}")
+                downloadQueue.trySend(downloadManager)
+            }
+            override fun onDownloadRemoved(downloadManager: DownloadManager, download: Download) {
+                logDebug(this@PrecacheService, "onDownloadRemoved: ${download.request.id}")
+                downloadQueue.trySend(downloadManager)
+            }
+        })
+    }
+}
 
     override fun getScheduler() = WorkManagerScheduler(this, DOWNLOAD_WORK_NAME)
 
@@ -257,43 +264,46 @@ class PrecacheService : DownloadService(
         mutableDownloadState.update { false }
     }
 
-    companion object {
-        @SuppressLint("UseKtx")
+    @SuppressLint("UseKtx")
 fun scheduleCache(context: Context, mediaItem: MediaItem) {
-    if (mediaItem.isLocal) return
+    if (mediaItem.isLocal) {
+        logDebug(context, "Batal scheduleCache: mediaItem ${mediaItem.mediaId} adalah lokal")
+        return
+    }
 
     logDebug(context, "Mulai scheduleCache untuk ${mediaItem.mediaId}")
 
-    val downloadRequest = DownloadRequest
-        .Builder(
-            mediaItem.mediaId,
-            mediaItem.requestMetadata.mediaUri
-                ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
-        )
+    val downloadRequest = DownloadRequest.Builder(
+        mediaItem.mediaId,
+        mediaItem.requestMetadata.mediaUri
+            ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
+    )
         .setCustomCacheKey(mediaItem.mediaId)
         .setData(mediaItem.mediaId.encodeToByteArray())
         .build()
 
-    transaction {
-        runCatching {
-            logDebug(context, "Menjalankan Database.insertPreserve untuk ${mediaItem.mediaId}")
-            Database.instance.insertPreserve(mediaItem)
-            logDebug(context, "InsertPreserve sukses")
-        }.onFailure {
-            logDebug(context, "InsertPreserve gagal: ${it.stackTraceToString()}")
-            return@transaction
-        }
+    try {
+        transaction {
+            runCatching {
+                logDebug(context, "InsertPreserve mulai untuk ${mediaItem.mediaId}")
+                Database.instance.insertPreserve(mediaItem)
+                logDebug(context, "InsertPreserve sukses untuk ${mediaItem.mediaId}")
+            }.onFailure {
+                logDebug(context, "InsertPreserve gagal: ${it.stackTraceToString()}")
+                return@transaction
+            }
 
-        coroutineScope.launch {
-            logDebug(context, "Mulai proses download ${mediaItem.mediaId}")
-            val result = context.download<PrecacheService>(downloadRequest)
-            result.exceptionOrNull()?.let {
-                logDebug(context, "Download error: ${it.stackTraceToString()}")
-                context.toast(context.getString(R.string.error_pre_cache))
-            } ?: logDebug(context, "Download berhasil untuk ${mediaItem.mediaId}")
+            coroutineScope.launch {
+                logDebug(context, "Mulai download untuk ${mediaItem.mediaId}")
+                val result = context.download<PrecacheService>(downloadRequest)
+                result.exceptionOrNull()?.let { err ->
+                    logDebug(context, "Download error: ${err.stackTraceToString()}")
+                    context.toast(context.getString(R.string.error_pre_cache))
+                } ?: logDebug(context, "Download berhasil dimulai untuk ${mediaItem.mediaId}")
+            }
         }
-    }
-}
+    } catch (e: Exception) {
+        logDebug(context, "Exception di scheduleCache: ${e.stackTraceToString()}")
     }
 }
 
