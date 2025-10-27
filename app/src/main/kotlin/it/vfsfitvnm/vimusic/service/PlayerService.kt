@@ -1352,13 +1352,35 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
 
         fun createDatabaseProvider(context: Context) = StandaloneDatabaseProvider(context)
         fun createCache(
-            context: Context,
-            directoryName: String = DEFAULT_CACHE_DIRECTORY,
-            size: ExoPlayerDiskCacheSize = DataPreferences.exoPlayerDiskCacheMaxSize
-        ) = with(context) {
-            val cacheEvictor = when (size) {
-                ExoPlayerDiskCacheSize.Unlimited -> NoOpCacheEvictor()
-                else -> LeastRecentlyUsedCacheEvictor(size.bytes)
+    context: Context,
+    directoryName: String = DEFAULT_CACHE_DIRECTORY,
+    size: ExoPlayerDiskCacheSize = DataPreferences.exoPlayerDiskCacheMaxSize
+): Cache = with(context) {
+    val cacheEvictor = when (size) {
+        ExoPlayerDiskCacheSize.Unlimited -> NoOpCacheEvictor()
+        else -> LeastRecentlyUsedCacheEvictor(size.bytes)
+    }
+
+    val directory = cacheDir.resolve(directoryName).apply {
+        if (!exists()) mkdir()
+    }
+
+    logCacheDebug(context, "createCache dipanggil di directory: $directoryName")
+
+    return@with try {
+        val cache = SimpleCache(directory, cacheEvictor, createDatabaseProvider(context))
+        logCacheDebug(context, "Cache berhasil dibuat: ${cache.cacheSpace} bytes digunakan")
+        cache
+    } catch (e: Exception) {
+        logCacheDebug(context, "Gagal membuat cache: ${e.stackTraceToString()}")
+        throw e
+    }
+        }
+
+            private fun logCacheDebug(context: Context, message: String) {
+    val logFile = File(context.getExternalFilesDir(null), "ViMusic_log.txt")
+    logFile.appendText("[PlayerService] $message\n")
+    Log.d("ViMusicDebug", message)
             }
 
             val directory = cacheDir.resolve(directoryName).apply {
