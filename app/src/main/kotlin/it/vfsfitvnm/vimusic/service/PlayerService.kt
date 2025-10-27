@@ -1136,7 +1136,10 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
             get() = this@PlayerService.player
 
         val cache: Cache
-            get() = this@PlayerService.cache
+    get() {
+        logCacheDebug(this@PlayerService, "Binder.cache diakses")
+        return this@PlayerService.cache
+    }
 
         val mediaSession
             get() = this@PlayerService.mediaSession
