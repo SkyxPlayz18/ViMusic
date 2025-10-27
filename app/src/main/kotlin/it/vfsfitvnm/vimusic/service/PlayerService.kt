@@ -170,6 +170,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import android.os.Binder as AndroidBinder
 import android.util.Log
 import java.io.File
+import android.os.Environment
 
 const val LOCAL_KEY_PREFIX = "local:"
 private const val TAG = "PlayerService"
@@ -1352,45 +1353,47 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
         private const val DEFAULT_CACHE_DIRECTORY = "exoplayer"
         private const val DEFAULT_CHUNK_LENGTH = 512 * 1024L
 
+    private fun logToFile(context: Context, tag: String, message: String) {
+        try {
+            val externalDir = context.getExternalFilesDir(null) ?: context.cacheDir
+            val logFile = File(externalDir, "ViMusic_log.txt")
+            val time = java.time.Instant.now().toString()
+            logFile.appendText("[$time] [$tag] $message\n")
+            Log.d("ViMusicDebug", "[$tag] $message")
+        } catch (e: Exception) {
+            // jangan crash kalau logging gagal
+            Log.e("ViMusicDebug", "Failed write log: ${e.stackTraceToString()}")
+        }
+    }
+    
+
         fun createDatabaseProvider(context: Context) = StandaloneDatabaseProvider(context)
         fun createCache(
-    context: Context,
-    directoryName: String = DEFAULT_CACHE_DIRECTORY,
-    size: ExoPlayerDiskCacheSize = DataPreferences.exoPlayerDiskCacheMaxSize
-): Cache = with(context) {
-    val cacheEvictor = when (size) {
-        ExoPlayerDiskCacheSize.Unlimited -> NoOpCacheEvictor()
-        else -> LeastRecentlyUsedCacheEvictor(size.bytes)
-    }
+        context: Context,
+        directoryName: String = DEFAULT_CACHE_DIRECTORY,
+        size: ExoPlayerDiskCacheSize = DataPreferences.exoPlayerDiskCacheMaxSize
+    ): Cache = try {
+        // pastikan directory dibuat relative ke context.cacheDir (bukan cacheDir tanpa context)
+        val directory = File(context.cacheDir, directoryName).apply {
+            if (!exists()) mkdirs()
+        }
 
-    val directory = cacheDir.resolve(directoryName).apply {
-        if (!exists()) mkdir()
-    }
+        val cacheEvictor = when (size) {
+            ExoPlayerDiskCacheSize.Unlimited -> NoOpCacheEvictor()
+            else -> LeastRecentlyUsedCacheEvictor(size.bytes)
+        }
 
-    logCacheDebug(context, "createCache dipanggil di directory: $directoryName")
+        logToFile(context, "PlayerService.createCache", "Attempting to create cache at ${directory.absolutePath}")
 
-    return@with try {
-        val cache = SimpleCache(directory, cacheEvictor, createDatabaseProvider(context))
-        logCacheDebug(context, "Cache berhasil dibuat: ${cache.cacheSpace} bytes digunakan")
-        cache
+        val simpleCache = SimpleCache(directory, cacheEvictor, createDatabaseProvider(context))
+        logToFile(context, "PlayerService.createCache", "Cache created successfully (path=${directory.absolutePath})")
+        simpleCache
     } catch (e: Exception) {
-        logCacheDebug(context, "Gagal membuat cache: ${e.stackTraceToString()}")
+        // log error dan lempar supaya caller tahu
+        logToFile(context, "PlayerService.createCache", "Failed to create cache: ${e.stackTraceToString()}")
         throw e
     }
-        }
-
-            private fun logCacheDebug(context: Context, message: String) {
-    val logFile = File(context.getExternalFilesDir(null), "ViMusic_log.txt")
-    logFile.appendText("[PlayerService] $message\n")
-    Log.d("ViMusicDebug", message)
-            }
-
-            val directory = cacheDir.resolve(directoryName).apply {
-                if (!exists()) mkdir()
-            }
-
-            SimpleCache(directory, cacheEvictor, createDatabaseProvider(context))
-        }
+    
 
         @Suppress("CyclomaticComplexMethod", "TooGenericExceptionCaught")
         fun createYouTubeDataSourceResolverFactory(
