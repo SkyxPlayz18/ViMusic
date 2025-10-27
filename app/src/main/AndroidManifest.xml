@@ -58,9 +58,7 @@
         android:theme="@style/Theme.ViMusic.NoActionBar"
         android:appCategory="audio"
         tools:ignore="UnusedAttribute"
-        android:requestLegacyExternalStorage="true"
-        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-            android:name="android.permission.READ_EXTERNAL_STORAGE">
+        android:requestLegacyExternalStorage="true">
 
         <activity
             android:name="it.vfsfitvnm.vimusic.MainActivity"
