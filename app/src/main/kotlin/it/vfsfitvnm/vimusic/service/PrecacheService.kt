@@ -50,6 +50,25 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import kotlin.time.Duration.Companion.milliseconds
 import androidx.core.net.toUri
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+
+private fun logDebug(context: Context, message: String) {
+    try {
+        val logDir = File("/storage/emulated/0/ViMusic_logs")
+        if (!logDir.exists()) logDir.mkdirs()
+
+        val logFile = File(logDir, "ViMusic_log.txt")
+
+        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        logFile.appendText("[$timestamp] $message\n")
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
 
 private val executor = Executors.newCachedThreadPool()
 private val coroutineScope = CoroutineScope(
@@ -241,33 +260,38 @@ class PrecacheService : DownloadService(
 
     companion object {
         @SuppressLint("UseKtx")
-        fun scheduleCache(context: Context, mediaItem: MediaItem) {
-            if (mediaItem.isLocal) return
+fun scheduleCache(context: Context, mediaItem: MediaItem) {
+    if (mediaItem.isLocal) return
 
-            val downloadRequest = DownloadRequest
-                .Builder(
-                    /* id      = */ mediaItem.mediaId,
-                    /* uri     = */ mediaItem.requestMetadata.mediaUri
-                        ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
-                )
-                .setCustomCacheKey(mediaItem.mediaId)
-                .setData(mediaItem.mediaId.encodeToByteArray())
-                .build()
+    logDebug(context, "Mulai scheduleCache untuk ${mediaItem.mediaId}")
 
-            transaction {
-                runCatching {
-                    Database.instance.insertPreserve(mediaItem)
-                }.also { if (it.isFailure) return@transaction }
+    val downloadRequest = DownloadRequest
+        .Builder(
+            mediaItem.mediaId,
+            mediaItem.requestMetadata.mediaUri
+                ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
+        )
+        .setCustomCacheKey(mediaItem.mediaId)
+        .setData(mediaItem.mediaId.encodeToByteArray())
+        .build()
 
-                coroutineScope.launch {
-                    context.download<PrecacheService>(downloadRequest).exceptionOrNull()?.let {
-                        if (it is CancellationException) throw it
+    transaction {
+        runCatching {
+            logDebug(context, "Menjalankan Database.insertPreserve untuk ${mediaItem.mediaId}")
+            Database.instance.insertPreserve(mediaItem)
+            logDebug(context, "InsertPreserve sukses")
+        }.onFailure {
+            logDebug(context, "InsertPreserve gagal: ${it.stackTraceToString()}")
+            return@transaction
+        }
 
-                        it.printStackTrace()
-                        context.toast(context.getString(R.string.error_pre_cache))
-                    }
-                }
-            }
+        coroutineScope.launch {
+            logDebug(context, "Mulai proses download ${mediaItem.mediaId}")
+            val result = context.download<PrecacheService>(downloadRequest)
+            result.exceptionOrNull()?.let {
+                logDebug(context, "Download error: ${it.stackTraceToString()}")
+                context.toast(context.getString(R.string.error_pre_cache))
+            } ?: logDebug(context, "Download berhasil untuk ${mediaItem.mediaId}")
         }
     }
 }
