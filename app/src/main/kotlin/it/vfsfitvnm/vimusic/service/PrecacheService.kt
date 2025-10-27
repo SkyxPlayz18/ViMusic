@@ -264,6 +264,7 @@ override fun getDownloadManager(): DownloadManager {
         mutableDownloadState.update { false }
     }
 
+    companion object {
     @SuppressLint("UseKtx")
 fun scheduleCache(context: Context, mediaItem: MediaItem) {
     if (mediaItem.isLocal) {
@@ -306,6 +307,7 @@ fun scheduleCache(context: Context, mediaItem: MediaItem) {
         logDebug(context, "Exception di scheduleCache: ${e.stackTraceToString()}")
     }
 }
+    }
 
 @Suppress("TooManyFunctions")
 @OptIn(UnstableApi::class)
