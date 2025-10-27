@@ -295,6 +295,7 @@ fun scheduleCache(context: Context, mediaItem: MediaItem) {
     }
 }
     }
+}
 
 @Suppress("TooManyFunctions")
 @OptIn(UnstableApi::class)
