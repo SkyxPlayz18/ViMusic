@@ -1399,110 +1399,88 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
                     .withAdditionalHeaders(mapOf("Range" to "bytes=$rangeText"))
             } ?: this
 
-            return@Factory if (
-    dataSpec.isLocal || (
-        chunkLength != null && cache.isCached(
-            /* key = */ requestedMediaId,
-            /* position = */ dataSpec.position,
-            /* length = */ chunkLength
-        )
-    )
-) {
-    dataSpec
-} else uriCache[requestedMediaId]?.let { cachedUri ->
-    dataSpec
-        .withUri(cachedUri.uri)
-        .ranged(cachedUri.meta)
-            } ?: run<DataSpec> {
-    var url: String? = null
-    var contentLength: Long? = null
-
-    runBlocking(Dispatchers.IO) {
-        try {
-            val bodyResult = Innertube.player(PlayerBody(videoId = requestedMediaId))
-            if (bodyResult == null) {
-                logDebug(context, "⚠️ API call return null untuk videoId=$requestedMediaId")
-                throw Exception("Innertube.player() mengembalikan null (kemungkinan network error / IP diblokir)")
-            }
-
-            val body = bodyResult.getOrNull()
-            if (body == null) {
-                logDebug(context, "⚠️ bodyResult.getOrNull() == null untuk videoId=$requestedMediaId")
-                throw Exception("API response body kosong.")
-            }
-
-            val format = body.streamingData?.highestQualityFormat
-            if (format == null) {
-                logDebug(context, "⚠️ Tidak ada format audio yang valid untuk videoId=$requestedMediaId")
-                throw Exception("No playable audio format.")
-            }
-
-            val finalUrl = format.findUrl(requestedMediaId)
-            if (finalUrl == null) {
-                logDebug(context, "⚠️ Gagal generate finalUrl untuk videoId=$requestedMediaId")
-                throw Exception("Failed to generate playable URL.")
-            }
-
-            logDebug(context, "✅ Berhasil dapetin URL: $finalUrl (contentLength=${format.contentLength})")
-
-            url = finalUrl
-            contentLength = format.contentLength
-
-        } catch (e: Exception) {
-            logDebug(context, "❌ Gagal resolve YouTube URL untuk $requestedMediaId: ${e.message}")
-            throw e
-        }
-    }
-
-    val uri = url!!.toUri()
-
-    uriCache.push(
-        key = requestedMediaId,
-        meta = contentLength,
-        uri = uri,
-        validUntil = Clock.System.now() + 24.hours
-    )
-
-    return@run dataSpec.buildUpon()
-        .setKey(requestedMediaId)
-        .build()
-        .withUri(uri)
-        .ranged(contentLength)
+            if (
+                dataSpec.isLocal || (
+                    chunkLength != null && cache.isCached(
+                        /* key = */ requestedMediaId,
+                        /* position = */ dataSpec.position,
+                        /* length = */ chunkLength
+                    )
+                    )
+            ) dataSpec
+            else uriCache[requestedMediaId]?.let { cachedUri ->
+                dataSpec
+                    .withUri(cachedUri.uri)
+                    .ranged(cachedUri.meta)
+            } ?: run {
+                val (url, contentLength) = runBlocking(Dispatchers.IO) {
+                    val body = Innertube.player(PlayerBody(videoId = requestedMediaId))?.getOrThrow()
+if (body == null) {
+    logDebug(context, "⚠️ API response null untuk videoId=$requestedMediaId")
+} else {
+    logDebug(context, "✅ API response OK untuk videoId=$requestedMediaId")
 }
-    this.handleUnknownErrors {
-        uriCache.clear()
-    }
-    .retryIf<UnplayableException>(
-        maxRetries = 3,
-        printStackTrace = true
-    )
-    .retryIf(
-        maxRetries = 1,
-        printStackTrace = true
-    ) { ex ->
-        ex.findCause<InvalidResponseCodeException>()?.responseCode == 403 ||
-        ex.findCause<ClientRequestException>()?.response?.status?.value == 403 ||
-        ex.findCause<InvalidHttpCodeException>() != null
-    }
-    .handleRangeErrors()
-    .withFallback(context) { dataSpec ->
-        val id = dataSpec.key ?: error("No id found for resolving an alternative song")
-        val alternativeSong = runBlocking {
-            Database.instance
-.localSongsByRowIdDesc()
-.first()
-.find { id in it.title }
-        } ?: error("No alternative song found")
 
-        dataSpec.buildUpon()
-            .setKey(alternativeSong.id)
-            .setUri(
-                ContentUris.withAppendedId(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    alternativeSong.id.substringAfter(LOCAL_KEY_PREFIX).toLong()
+val format = body?.streamingData?.highestQualityFormat
+if (format == null) {
+    logDebug(context, "❌ Tidak ada format audio valid untuk $requestedMediaId")
+}
+
+val finalUrl = format?.findUrl(requestedMediaId)
+if (finalUrl == null) {
+    logDebug(context, "❌ Gagal generate playable URL untuk $requestedMediaId")
+} else {
+    logDebug(context, "🎯 Dapat playable URL: $finalUrl")
+}
+
+                val uri = url.toUri()
+
+                uriCache.push(
+                    key = requestedMediaId,
+                    meta = contentLength,
+                    uri = uri,
+                    validUntil = Clock.System.now() + 24.hours
                 )
-            )
-            .build()
-    }
+
+                dataSpec.buildUpon().setKey(requestedMediaId).build()
+                    .withUri(uri)
+                    .ranged(contentLength)
+            }
         }
+            .handleUnknownErrors {
+                uriCache.clear()
+            }
+            .retryIf<UnplayableException>(
+                maxRetries = 3,
+                printStackTrace = true
+            )
+            .retryIf(
+                maxRetries = 1,
+                printStackTrace = true
+            ) { ex ->
+                ex.findCause<InvalidResponseCodeException>()?.responseCode == 403 ||
+                    ex.findCause<ClientRequestException>()?.response?.status?.value == 403 ||
+                    ex.findCause<InvalidHttpCodeException>() != null
+            }
+            .handleRangeErrors()
+            .withFallback(context) { dataSpec ->
+                val id = dataSpec.key ?: error("No id found for resolving an alternative song")
+                val alternativeSong = runBlocking {
+                    Database.instance
+                        .localSongsByRowIdDesc()
+                        .first()
+                        .find { id in it.title }
+                } ?: error("No alternative song found")
+
+                dataSpec.buildUpon()
+                    .setKey(alternativeSong.id)
+                    .setUri(
+                        ContentUris.withAppendedId(
+                            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                            alternativeSong.id.substringAfter(LOCAL_KEY_PREFIX).toLong()
+                        )
+                    )
+                    .build()
+            }
     }
+}
