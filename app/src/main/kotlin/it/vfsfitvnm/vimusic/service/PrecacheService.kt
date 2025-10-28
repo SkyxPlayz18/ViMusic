@@ -266,48 +266,57 @@ override fun getDownloadManager(): DownloadManager {
     
     companion object {
     @SuppressLint("UseKtx")
-    fun scheduleCache(context: Context, mediaItem: MediaItem) {
-        if (mediaItem.isLocal) {
-            logDebug(context, "Batal scheduleCache: mediaItem ${mediaItem.mediaId} adalah lokal")
-            return
-        }
+fun scheduleCache(context: Context, mediaItem: MediaItem) {
+    if (mediaItem.isLocal) return
+    logDebug(context, "Mulai scheduleCache untuk ${mediaItem.mediaId}")
 
-        logDebug(context, "Mulai scheduleCache untuk ${mediaItem.mediaId}")
+    // 💡 Tambahan: Panasin resolver dulu biar URL valid
+    val resolver = PlayerService.createYouTubeDataSourceResolverFactory(
+        context,
+        cache = Database.instance.cache, // bisa null kalau belum ada
+        chunkLength = null
+    )
 
-        val downloadRequest = DownloadRequest.Builder(
-            mediaItem.mediaId,
-            mediaItem.requestMetadata.mediaUri
-                ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
-        )
-            .setCustomCacheKey(mediaItem.mediaId)
-            .setData(mediaItem.mediaId.encodeToByteArray())
+    val resolvedUri = runCatching {
+        val dataSpec = DataSpec.Builder()
+            .setKey(mediaItem.mediaId)
+            .setUri("https://youtube.com/watch?v=${mediaItem.mediaId}".toUri())
             .build()
 
-        try {
-            transaction {
-                runCatching {
-                    logDebug(context, "InsertPreserve mulai untuk ${mediaItem.mediaId}")
-                    Database.instance.insertPreserve(mediaItem)
-                    logDebug(context, "InsertPreserve sukses untuk ${mediaItem.mediaId}")
-                }.onFailure {
-                    logDebug(context, "InsertPreserve gagal: ${it.stackTraceToString()}")
-                    return@transaction
-                }
+        resolver.createDataSource().apply { open(dataSpec) }.uri ?: dataSpec.uri
+    }.getOrElse {
+        logDebug(context, "Resolver gagal: ${it.message}")
+        "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
+    }
 
-                coroutineScope.launch {
-                    logDebug(context, "Mulai download untuk ${mediaItem.mediaId}")
-                    val result = context.download<PrecacheService>(downloadRequest)
-                    result.exceptionOrNull()?.let { err ->
-                        logDebug(context, "Download error: ${err.stackTraceToString()}")
-                        context.toast(context.getString(R.string.error_pre_cache))
-                    } ?: logDebug(context, "Download berhasil dimulai untuk ${mediaItem.mediaId}")
-                }
-            }
-        } catch (e: Exception) {
-            logDebug(context, "Exception di scheduleCache: ${e.stackTraceToString()}")
+    val downloadRequest = DownloadRequest.Builder(
+        mediaItem.mediaId,
+        resolvedUri
+    )
+        .setCustomCacheKey(mediaItem.mediaId)
+        .setData(mediaItem.mediaId.encodeToByteArray())
+        .build()
+
+    // lanjut seperti biasa
+    transaction {
+        runCatching {
+            logDebug(context, "InsertPreserve mulai untuk ${mediaItem.mediaId}")
+            Database.instance.insertPreserve(mediaItem)
+            logDebug(context, "InsertPreserve sukses untuk ${mediaItem.mediaId}")
+        }.onFailure {
+            logDebug(context, "InsertPreserve gagal: ${it.stackTraceToString()}")
+            return@transaction
+        }
+
+        coroutineScope.launch {
+            logDebug(context, "Mulai download untuk ${mediaItem.mediaId}")
+            val result = context.download<PrecacheService>(downloadRequest)
+            result.exceptionOrNull()?.let { err ->
+                logDebug(context, "Download error: ${err.stackTraceToString()}")
+                context.toast(context.getString(R.string.error_pre_cache))
+            } ?: logDebug(context, "Download berhasil dimulai untuk ${mediaItem.mediaId}")
         }
     }
-}
 }
 
 // =======================
