@@ -308,6 +308,7 @@ override fun getDownloadManager(): DownloadManager {
         }
     }
 }
+}
 
 // =======================
 //  BlockingDeferredCache
