@@ -77,6 +77,7 @@ import it.vfsfitvnm.core.ui.utils.songBundle
 import it.vfsfitvnm.core.ui.utils.streamVolumeFlow
 import it.vfsfitvnm.vimusic.utils.logDebug
 import it.vfsfitvnm.vimusic.utils.handleUnknownErrors
+import it.vfsfitvnm.vimusic.utils.ExoPlayer
 import it.vfsfitvnm.providers.innertube.Innertube
 import it.vfsfitvnm.providers.innertube.InvalidHttpCodeException
 import it.vfsfitvnm.providers.innertube.NewPipeUtils
@@ -1399,7 +1400,7 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
                     .withAdditionalHeaders(mapOf("Range" to "bytes=$rangeText"))
             } ?: this
 
-            return@ResolvingDataSource.Factory if (
+            return@Factory if (
     dataSpec.isLocal || (
         chunkLength != null && cache.isCached(
             /* key = */ requestedMediaId,
