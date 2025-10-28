@@ -214,37 +214,45 @@ override fun getDownloadManager(): DownloadManager {
             override fun onDownloadChanged(
     downloadManager: DownloadManager,
     download: Download,
-    finalException: java.lang.Exception?
+    finalException: Exception?
 ) {
-    logDebug(this, "onDownloadChanged: ${download.request.id}, state=${download.state}")
+    logDebug(this@PrecacheService, "onDownloadChanged: ${download.request.id}, state=${download.state}")
 
     if (download.state == Download.STATE_COMPLETED) {
-        logDebug(this, "✅ Download selesai untuk ${download.request.id}")
+        logDebug(this@PrecacheService, "✅ Download selesai untuk ${download.request.id}")
+
         try {
-            val cachedFile = File(cache.cacheDir, download.request.id)
+            val cacheFolder = File(applicationContext.cacheDir, "exoplayer")
+            val cachedFile = File(cacheFolder, download.request.id)
+
             if (cachedFile.exists()) {
-                logDebug(this, "🎵 File tersimpan di cache: ${cachedFile.absolutePath} (${cachedFile.length()} bytes)")
+                logDebug(this@PrecacheService, "🎵 File tersimpan di cache: ${cachedFile.absolutePath} (${cachedFile.length()} bytes)")
             } else {
-                logDebug(this, "⚠️ File ${download.request.id} tidak ditemukan di cache folder!")
+                logDebug(this@PrecacheService, "⚠️ File ${download.request.id} tidak ditemukan di folder cache!")
             }
         } catch (e: Exception) {
-            logDebug(this, "Error cek file cache: ${e.stackTraceToString()}")
+            logDebug(this@PrecacheService, "Error cek file cache: ${e.stackTraceToString()}")
         }
 
         // update database biar muncul di album offline
-        runCatching {
-            Database.instance.getSongById(download.request.id)?.let { song ->
-                val updated = song.copy(isCached = true)
-                Database.instance.upsert(updated)
-                logDebug(this, "🗂️ DB updated: ${song.title} ditandai cached")
+        runBlocking {
+            runCatching {
+                val song = Database.instance.getSongById(download.request.id)
+                if (song != null) {
+                    val updated = song.copy(likedAt = song.likedAt ?: System.currentTimeMillis())
+                    Database.instance.upsert(updated)
+                    logDebug(this@PrecacheService, "🗂️ DB updated: ${song.title} ditandai cached")
+                } else {
+                    logDebug(this@PrecacheService, "⚠️ Song ${download.request.id} tidak ditemukan di database")
+                }
+            }.onFailure {
+                logDebug(this@PrecacheService, "DB update error: ${it.stackTraceToString()}")
             }
-        }.onFailure {
-            logDebug(this, "DB update error: ${it.stackTraceToString()}")
         }
     }
 
     if (download.state == Download.STATE_FAILED) {
-        logDebug(this, "❌ Download gagal: ${finalException?.stackTraceToString()}")
+        logDebug(this@PrecacheService, "❌ Download gagal: ${finalException?.stackTraceToString()}")
     }
             }
             override fun onDownloadRemoved(downloadManager: DownloadManager, download: Download) {
