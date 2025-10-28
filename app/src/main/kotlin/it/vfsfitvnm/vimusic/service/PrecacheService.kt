@@ -356,6 +356,7 @@ fun scheduleCache(context: Context, mediaItem: MediaItem) {
     }
 }
     }
+}
 // =======================
 //  BlockingDeferredCache
 // =======================
