@@ -1504,3 +1504,4 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
             .build()
     }
         }
+    }
