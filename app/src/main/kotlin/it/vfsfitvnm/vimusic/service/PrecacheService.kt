@@ -266,7 +266,6 @@ override fun getDownloadManager(): DownloadManager {
     }
     
     companion object {
-    companion object {
     @SuppressLint("UseKtx")
     fun scheduleCache(context: Context, mediaItem: MediaItem) {
         if (mediaItem.isLocal) {
