@@ -283,7 +283,6 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
             initialValue = false
         )
 
-        companion object {
     var cacheInstance: Cache? = null
         private set
 
@@ -294,7 +293,6 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
             cacheInstance = it
         }
     }
-        }
 
     private val glyphInterface by lazy { GlyphInterface(applicationContext) }
 
