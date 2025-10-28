@@ -283,17 +283,6 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
             initialValue = false
         )
 
-    var cacheInstance: Cache? = null
-        private set
-
-    fun createCache(context: Context): Cache {
-        val cacheEvictor = LeastRecentlyUsedCacheEvictor(DataPreferences.exoPlayerDiskCacheMaxSize.bytes)
-        val directory = context.cacheDir.resolve("exoplayer").apply { mkdirs() }
-        return SimpleCache(directory, cacheEvictor, StandaloneDatabaseProvider(context)).also {
-            cacheInstance = it
-        }
-    }
-
     private val glyphInterface by lazy { GlyphInterface(applicationContext) }
 
     private var poiTimestamp: Long? by mutableStateOf(null)
