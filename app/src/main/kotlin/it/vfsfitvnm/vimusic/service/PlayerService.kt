@@ -213,6 +213,19 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
             PlaybackState.ACTION_REWIND or
             PlaybackState.ACTION_PLAY_FROM_SEARCH
 
+    companion object {
+    var cacheInstance: Cache? = null
+        private set
+
+    fun createCache(context: Context): Cache {
+        val cacheEvictor = LeastRecentlyUsedCacheEvictor(DataPreferences.exoPlayerDiskCacheMaxSize.bytes)
+        val directory = context.cacheDir.resolve("exoplayer").apply { mkdirs() }
+        return SimpleCache(directory, cacheEvictor, StandaloneDatabaseProvider(context)).also {
+            cacheInstance = it
+        }
+    }
+    }
+
     private val stateBuilder
         get() = PlaybackState.Builder().setActions(
             defaultActions.let {
@@ -1470,18 +1483,5 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
                     )
                     .build()
             }
-    }
-}
-
-companion object {
-    var cacheInstance: Cache? = null
-        private set
-
-    fun createCache(context: Context): Cache {
-        val cacheEvictor = LeastRecentlyUsedCacheEvictor(DataPreferences.exoPlayerDiskCacheMaxSize.bytes)
-        val directory = context.cacheDir.resolve("exoplayer").apply { mkdirs() }
-        return SimpleCache(directory, cacheEvictor, StandaloneDatabaseProvider(context)).also {
-            cacheInstance = it
-        }
     }
 }
