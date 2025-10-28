@@ -1410,12 +1410,12 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
                 dataSpec
                     .withUri(cachedUri.uri)
                     .ranged(cachedUri.meta)
-            } ?: run {
-                val (url, contentLength) = runBlocking(Dispatchers.IO) {
+            } ?: run<DataSpec> {
+                val (url, contentLength): Pair<String, Long?> = runBlocking(Dispatchers.IO) {
     try {
         val bodyResult = Innertube.player(PlayerBody(videoId = requestedMediaId))
         if (bodyResult == null) {
-            logDebug("YouTubeResolver", "⚠️ API call return null untuk videoId=$requestedMediaId")
+            logDebug(context, "⚠️ API call return null untuk videoId=$requestedMediaId")
             throw Exception("Innertube.player() mengembalikan null (kemungkinan network error / IP diblokir)")
         }
 
