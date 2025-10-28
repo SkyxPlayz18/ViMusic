@@ -212,12 +212,40 @@ override fun getDownloadManager(): DownloadManager {
                 mutableDownloadState.update { false }
             }
             override fun onDownloadChanged(
-                downloadManager: DownloadManager,
-                download: Download,
-                finalException: Exception?
-            ) {
-                logDebug(this@PrecacheService, "onDownloadChanged: ${download.request.id}, state=${download.state}")
-                downloadQueue.trySend(downloadManager)
+    downloadManager: DownloadManager,
+    download: Download,
+    finalException: java.lang.Exception?
+) {
+    logDebug(this, "onDownloadChanged: ${download.request.id}, state=${download.state}")
+
+    if (download.state == Download.STATE_COMPLETED) {
+        logDebug(this, "✅ Download selesai untuk ${download.request.id}")
+        try {
+            val cachedFile = File(cache.cacheDir, download.request.id)
+            if (cachedFile.exists()) {
+                logDebug(this, "🎵 File tersimpan di cache: ${cachedFile.absolutePath} (${cachedFile.length()} bytes)")
+            } else {
+                logDebug(this, "⚠️ File ${download.request.id} tidak ditemukan di cache folder!")
+            }
+        } catch (e: Exception) {
+            logDebug(this, "Error cek file cache: ${e.stackTraceToString()}")
+        }
+
+        // update database biar muncul di album offline
+        runCatching {
+            Database.instance.getSongById(download.request.id)?.let { song ->
+                val updated = song.copy(isCached = true)
+                Database.instance.upsert(updated)
+                logDebug(this, "🗂️ DB updated: ${song.title} ditandai cached")
+            }
+        }.onFailure {
+            logDebug(this, "DB update error: ${it.stackTraceToString()}")
+        }
+    }
+
+    if (download.state == Download.STATE_FAILED) {
+        logDebug(this, "❌ Download gagal: ${finalException?.stackTraceToString()}")
+    }
             }
             override fun onDownloadRemoved(downloadManager: DownloadManager, download: Download) {
                 logDebug(this@PrecacheService, "onDownloadRemoved: ${download.request.id}")
