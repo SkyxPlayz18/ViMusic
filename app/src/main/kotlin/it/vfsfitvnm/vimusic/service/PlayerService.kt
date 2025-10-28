@@ -1412,14 +1412,37 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
                     .ranged(cachedUri.meta)
             } ?: run {
                 val (url, contentLength) = runBlocking(Dispatchers.IO) {
-                    val body = Innertube.player(PlayerBody(videoId = requestedMediaId))?.getOrThrow()
-                        ?: throw Exception("API response was null.")
-                    val format = body.streamingData?.highestQualityFormat
-                        ?: throw Exception("Could not find a playable audio format in the response.")
-                    val finalUrl = format.findUrl(requestedMediaId)
-                        ?: throw Exception("Failed to generate a playable URL from the selected format.")
-                    Pair(finalUrl, format.contentLength)
-                }
+    try {
+        val bodyResult = Innertube.player(PlayerBody(videoId = requestedMediaId))
+        if (bodyResult == null) {
+            logDebug("YouTubeResolver", "⚠️ API call return null untuk videoId=$requestedMediaId")
+            throw Exception("Innertube.player() mengembalikan null (kemungkinan network error / IP diblokir)")
+        }
+
+        val body = bodyResult.getOrNull()
+        if (body == null) {
+            logDebug("YouTubeResolver", "⚠️ bodyResult.getOrNull() == null untuk videoId=$requestedMediaId")
+            throw Exception("API response body kosong.")
+        }
+
+        val format = body.streamingData?.highestQualityFormat
+        if (format == null) {
+            logDebug("YouTubeResolver", "⚠️ Tidak ada format audio yang valid untuk videoId=$requestedMediaId")
+            throw Exception("No playable audio format.")
+        }
+
+        val finalUrl = format.findUrl(requestedMediaId)
+        if (finalUrl == null) {
+            logDebug("YouTubeResolver", "⚠️ Gagal generate finalUrl untuk videoId=$requestedMediaId")
+            throw Exception("Failed to generate playable URL.")
+        }
+
+        logDebug("YouTubeResolver", "✅ Berhasil dapetin URL: $finalUrl (contentLength=${format.contentLength})")
+        Pair(finalUrl, format.contentLength)
+    } catch (e: Exception) {
+        logDebug("YouTubeResolver", "❌ Gagal resolve YouTube URL untuk $requestedMediaId: ${e.message}")
+        throw e
+    }
 
                 val uri = url.toUri()
 
