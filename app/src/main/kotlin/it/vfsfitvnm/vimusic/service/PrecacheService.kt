@@ -263,52 +263,55 @@ override fun getDownloadManager(): DownloadManager {
         unregisterReceiver(notificationActionReceiver)
         mutableDownloadState.update { false }
     }
-
+    
     companion object {
     @SuppressLint("UseKtx")
-fun scheduleCache(context: Context, mediaItem: MediaItem) {
-    if (mediaItem.isLocal) {
-        logDebug(context, "Batal scheduleCache: mediaItem ${mediaItem.mediaId} adalah lokal")
-        return
-    }
-
-    logDebug(context, "Mulai scheduleCache untuk ${mediaItem.mediaId}")
-
-    val downloadRequest = DownloadRequest.Builder(
-        mediaItem.mediaId,
-        mediaItem.requestMetadata.mediaUri
-            ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
-    )
-        .setCustomCacheKey(mediaItem.mediaId)
-        .setData(mediaItem.mediaId.encodeToByteArray())
-        .build()
-
-    try {
-        transaction {
-            runCatching {
-                logDebug(context, "InsertPreserve mulai untuk ${mediaItem.mediaId}")
-                Database.instance.insertPreserve(mediaItem)
-                logDebug(context, "InsertPreserve sukses untuk ${mediaItem.mediaId}")
-            }.onFailure {
-                logDebug(context, "InsertPreserve gagal: ${it.stackTraceToString()}")
-                return@transaction
-            }
-
-            coroutineScope.launch {
-                logDebug(context, "Mulai download untuk ${mediaItem.mediaId}")
-                val result = context.download<PrecacheService>(downloadRequest)
-                result.exceptionOrNull()?.let { err ->
-                    logDebug(context, "Download error: ${err.stackTraceToString()}")
-                    context.toast(context.getString(R.string.error_pre_cache))
-                } ?: logDebug(context, "Download berhasil dimulai untuk ${mediaItem.mediaId}")
-            }
+    fun scheduleCache(context: Context, mediaItem: MediaItem) {
+        if (mediaItem.isLocal) {
+            logDebug(context, "Batal scheduleCache: mediaItem ${mediaItem.mediaId} adalah lokal")
+            return
         }
-    } catch (e: Exception) {
-        logDebug(context, "Exception di scheduleCache: ${e.stackTraceToString()}")
+
+        logDebug(context, "Mulai scheduleCache untuk ${mediaItem.mediaId}")
+
+        val downloadRequest = DownloadRequest.Builder(
+            mediaItem.mediaId,
+            mediaItem.requestMetadata.mediaUri
+                ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
+        )
+            .setCustomCacheKey(mediaItem.mediaId)
+            .setData(mediaItem.mediaId.encodeToByteArray())
+            .build()
+
+        try {
+            transaction {
+                runCatching {
+                    logDebug(context, "InsertPreserve mulai untuk ${mediaItem.mediaId}")
+                    Database.instance.insertPreserve(mediaItem)
+                    logDebug(context, "InsertPreserve sukses untuk ${mediaItem.mediaId}")
+                }.onFailure {
+                    logDebug(context, "InsertPreserve gagal: ${it.stackTraceToString()}")
+                    return@transaction
+                }
+
+                coroutineScope.launch {
+                    logDebug(context, "Mulai download untuk ${mediaItem.mediaId}")
+                    val result = context.download<PrecacheService>(downloadRequest)
+                    result.exceptionOrNull()?.let { err ->
+                        logDebug(context, "Download error: ${err.stackTraceToString()}")
+                        context.toast(context.getString(R.string.error_pre_cache))
+                    } ?: logDebug(context, "Download berhasil dimulai untuk ${mediaItem.mediaId}")
+                }
+            }
+        } catch (e: Exception) {
+            logDebug(context, "Exception di scheduleCache: ${e.stackTraceToString()}")
+        }
     }
 }
-    }
 
+// =======================
+//  BlockingDeferredCache
+// =======================
 @Suppress("TooManyFunctions")
 @OptIn(UnstableApi::class)
 class BlockingDeferredCache(private val cache: Deferred<Cache>) : Cache {
