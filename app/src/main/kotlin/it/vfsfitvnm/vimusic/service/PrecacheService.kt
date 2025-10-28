@@ -12,6 +12,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.CacheSpan
 import androidx.media3.datasource.cache.ContentMetadataMutations
+import androidx.media3.datasource.DataSpec
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadNotificationHelper
@@ -265,60 +266,91 @@ override fun getDownloadManager(): DownloadManager {
     }
     
     companion object {
+    companion object {
     @SuppressLint("UseKtx")
-fun scheduleCache(context: Context, mediaItem: MediaItem) {
-    if (mediaItem.isLocal) return
-    logDebug(context, "Mulai scheduleCache untuk ${mediaItem.mediaId}")
+    fun scheduleCache(context: Context, mediaItem: MediaItem) {
+        if (mediaItem.isLocal) {
+            logDebug(context, "Batal scheduleCache: mediaItem ${mediaItem.mediaId} adalah lokal")
+            return
+        }
 
-    // 💡 Tambahan: Panasin resolver dulu biar URL valid
-    val resolver = PlayerService.createYouTubeDataSourceResolverFactory(
-        context,
-        cache = Database.instance.cache, // bisa null kalau belum ada
-        chunkLength = null
-    )
+        logDebug(context, "Mulai scheduleCache untuk ${mediaItem.mediaId}")
 
-    val resolvedUri = runCatching {
-        val dataSpec = DataSpec.Builder()
-            .setKey(mediaItem.mediaId)
-            .setUri("https://youtube.com/watch?v=${mediaItem.mediaId}".toUri())
+        // Build download request uri (fallback)
+        val fallbackUri = ("https://youtube.com/watch?v=${mediaItem.mediaId}").toUri()
+
+        // --- TRY to create a resolver with a local cache instance (safe) ---
+        val resolverFactory = runCatching {
+            // createCache is in PlayerService companion — use it to create a SimpleCache instance
+            val tempCache = PlayerService.createCache(context)
+            PlayerService.createYouTubeDataSourceResolverFactory(
+                context = context,
+                cache = tempCache,
+                chunkLength = null
+            )
+        }.getOrElse { err ->
+            logDebug(context, "Gagal buat resolverFactory: ${err.stackTraceToString()}")
+            null
+        }
+
+        // Try to resolve direct media URI using resolverFactory (if available)
+        val resolvedUri = runCatching {
+            if (resolverFactory != null) {
+                // Build a DataSpec with key and uri (use YouTube fallback uri)
+                val dataSpec = DataSpec.Builder()
+                    .setUri(fallbackUri)
+                    .setKey(mediaItem.mediaId)
+                    .build()
+
+                // create dataSource and attempt to open -> use uri from datasource if available
+                val ds = resolverFactory.createDataSource()
+                try {
+                    ds.open(dataSpec)
+                    ds.uri ?: fallbackUri
+                } finally {
+                    runCatching { ds.close() }
+                }
+            } else fallbackUri
+        }.getOrElse { ex ->
+            logDebug(context, "Resolver gagal saat open: ${ex.stackTraceToString()}")
+            fallbackUri
+        }
+
+        // Build DownloadRequest with resolvedUri
+        val downloadRequest = DownloadRequest.Builder(
+            /* id = */ mediaItem.mediaId,
+            /* uri = */ resolvedUri
+        )
+            .setCustomCacheKey(mediaItem.mediaId)
+            .setData(mediaItem.mediaId.encodeToByteArray())
             .build()
 
-        resolver.createDataSource().apply { open(dataSpec) }.uri ?: dataSpec.uri
-    }.getOrElse {
-        logDebug(context, "Resolver gagal: ${it.message}")
-        "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
-    }
+        try {
+            transaction {
+                runCatching {
+                    logDebug(context, "InsertPreserve mulai untuk ${mediaItem.mediaId}")
+                    Database.instance.insertPreserve(mediaItem)
+                    logDebug(context, "InsertPreserve sukses untuk ${mediaItem.mediaId}")
+                }.onFailure {
+                    logDebug(context, "InsertPreserve gagal: ${it.stackTraceToString()}")
+                    return@transaction
+                }
 
-    val downloadRequest = DownloadRequest.Builder(
-        mediaItem.mediaId,
-        resolvedUri
-    )
-        .setCustomCacheKey(mediaItem.mediaId)
-        .setData(mediaItem.mediaId.encodeToByteArray())
-        .build()
-
-    // lanjut seperti biasa
-    transaction {
-        runCatching {
-            logDebug(context, "InsertPreserve mulai untuk ${mediaItem.mediaId}")
-            Database.instance.insertPreserve(mediaItem)
-            logDebug(context, "InsertPreserve sukses untuk ${mediaItem.mediaId}")
-        }.onFailure {
-            logDebug(context, "InsertPreserve gagal: ${it.stackTraceToString()}")
-            return@transaction
-        }
-
-        coroutineScope.launch {
-            logDebug(context, "Mulai download untuk ${mediaItem.mediaId}")
-            val result = context.download<PrecacheService>(downloadRequest)
-            result.exceptionOrNull()?.let { err ->
-                logDebug(context, "Download error: ${err.stackTraceToString()}")
-                context.toast(context.getString(R.string.error_pre_cache))
-            } ?: logDebug(context, "Download berhasil dimulai untuk ${mediaItem.mediaId}")
+                coroutineScope.launch {
+                    logDebug(context, "Mulai download untuk ${mediaItem.mediaId} -> $resolvedUri")
+                    val result = context.download<PrecacheService>(downloadRequest)
+                    result.exceptionOrNull()?.let { err ->
+                        logDebug(context, "Download error: ${err.stackTraceToString()}")
+                        context.toast(context.getString(R.string.error_pre_cache))
+                    } ?: logDebug(context, "Download berhasil dimulai untuk ${mediaItem.mediaId}")
+                }
+            }
+        } catch (e: Exception) {
+            logDebug(context, "Exception di scheduleCache: ${e.stackTraceToString()}")
         }
     }
-}
-
+    }
+    }
 // =======================
 //  BlockingDeferredCache
 // =======================
