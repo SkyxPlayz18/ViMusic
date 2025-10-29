@@ -143,6 +143,9 @@ interface Database {
     @RewriteQueriesToDropUnusedColumns
     fun localSongsByPlayTimeDesc(): Flow<List<Song>>
 
+    @Query("SELECT * FROM Song WHERE isCached = 1")
+fun offlineSongs(): Flow<List<Song>>
+
     @Suppress("CyclomaticComplexMethod")
     fun songs(sortBy: SongSortBy, sortOrder: SortOrder, isLocal: Boolean = false) = when (sortBy) {
         SongSortBy.PlayTime -> when (sortOrder) {
