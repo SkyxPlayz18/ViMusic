@@ -397,7 +397,7 @@ suspend fun getSongById(id: String): Song?
     fun getMinPosition(playlistId: Long): Int?
 
     @Query("SELECT MAX(position) FROM SongPlaylistMap WHERE playlistId = :playlistId")
-fun getMaxPosition(playlistId: Long): Int?
+fun getMaxPosition(playlistId: String): Int?
 
     fun getNextTopPosition(playlistId: Long): Int {
     val min = getMinPosition(playlistId)
@@ -798,7 +798,7 @@ fun updateSongPositions(
     fun insert(queuedMediaItems: List<QueuedMediaItem>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-fun insertSongPlaylistMap(map: SongPlaylistMap)
+fun insertSongPlaylistMap(map: SongPlaylistMap: List<SongPlaylistMap>)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insert(album: Album, songAlbumMap: SongAlbumMap)
