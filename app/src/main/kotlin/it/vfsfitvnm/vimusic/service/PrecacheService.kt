@@ -252,29 +252,27 @@ override fun getDownloadManager(): DownloadManager {
                             // Cek apakah playlist "Offline Songs" sudah ada
 var offlinePlaylist = Database.instance.getPlaylistByName("Offline Songs")
 
-// Kalau belum ada, buat baru dan ambil objek-nya
+// Kalau belum ada, buat baru
 if (offlinePlaylist == null) {
     val playlistId = Database.instance.insert(
-        Playlist(name = "Offline Songs", id = UUID.randomUUID().toString())
+        Playlist(name = "Offline Songs")
     )
-    // Ambil kembali playlist dari database (pastikan return-nya Playlist)
+    // Ambil kembali playlist dari database
     offlinePlaylist = Database.instance.getPlaylistByName("Offline Songs")
 }
 
-// Sekarang offlinePlaylist udah pasti bukan null
 offlinePlaylist?.let {
     Database.instance.insertSongPlaylistMaps(
         listOf(
             SongPlaylistMap(
                 songId = song.id,
-                playlistId = it.id,
-                position = (Database.instance.getMaxPosition(it.id) ?: 0) + 1
+                playlistId = it.id.toString(), // 🔧 ubah ke String
+                position = (Database.instance.getMaxPosition(it.id.toString()) ?: 0) + 1
             )
         )
     )
 }
-    )
-)
+
                         } ?: logDebug(this@PrecacheService, "⚠️ Song $id gak ketemu di DB.")
                     } catch (e: Exception) {
                         logDebug(this@PrecacheService, "DB error: ${e.stackTraceToString()}")
