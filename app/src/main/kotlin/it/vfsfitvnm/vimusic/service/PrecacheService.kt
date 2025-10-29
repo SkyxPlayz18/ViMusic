@@ -217,10 +217,10 @@ override fun getDownloadManager(): DownloadManager {
     finalException: Exception?
 ) {
     val id = download.request.id
-    logDebug(this, "onDownloadChanged: $id, state=${download.state}")
+    logDebug(this@PrecacheService, "onDownloadChanged: $id, state=${download.state}")
 
     if (download.state == Download.STATE_COMPLETED) {
-        logDebug(this, "✅ Download selesai untuk $id")
+        logDebug(this@PrecacheService, "✅ Download selesai untuk $id")
 
         // Jalankan kerja berat di coroutine (biar gak kena Room error)
         coroutineScope.launch {
@@ -260,7 +260,7 @@ override fun getDownloadManager(): DownloadManager {
     }
 
     if (download.state == Download.STATE_FAILED) {
-        logDebug(this, "❌ Download gagal: ${finalException?.stackTraceToString()}")
+        logDebug(this@PrecacheService, "❌ Download gagal: ${finalException?.stackTraceToString()}")
     }
 }
             override fun onDownloadRemoved(downloadManager: DownloadManager, download: Download) {
