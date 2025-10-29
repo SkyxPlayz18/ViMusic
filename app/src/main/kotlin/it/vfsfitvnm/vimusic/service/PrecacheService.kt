@@ -250,15 +250,15 @@ override fun getDownloadManager(): DownloadManager {
                             Database.instance.upsert(it)
                             logDebug(this@PrecacheService, "🗂️ DB updated: ${it.title} disimpan offline.")
                             // Cek apakah playlist "Offline Songs" sudah ada
-var offlinePlaylist = Database.instance.getPlaylistByName("Offline Songs")
+var offlinePlaylist = Database.instance.getPlaylistByName("Offline")
 
 // Kalau belum ada, buat baru
 if (offlinePlaylist == null) {
     val playlistId = Database.instance.insert(
-        Playlist(name = "Offline Songs")
+        Playlist(name = "Offline")
     )
     // Ambil kembali playlist dari database
-    offlinePlaylist = Database.instance.getPlaylistByName("Offline Songs")
+    offlinePlaylist = Database.instance.getPlaylistByName("Offline")
 }
 
 offlinePlaylist?.let {
