@@ -1374,7 +1374,7 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
         }
     }
         }
-}
+    
         @Suppress("CyclomaticComplexMethod", "TooGenericExceptionCaught")
         fun createYouTubeDataSourceResolverFactory(
             context: Context,
