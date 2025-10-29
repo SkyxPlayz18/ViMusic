@@ -267,7 +267,7 @@ offlinePlaylist?.let {
             SongPlaylistMap(
                 songId = song.id,
                 playlistId = it.id, // 🔧 ubah ke String
-                position = (Database.instance.getMaxPosition(it.id) ?: 0) + 1
+                position = (Database.instance.getMaxPosition(it.id.toString()) ?: 0) + 1
             )
         )
     )
