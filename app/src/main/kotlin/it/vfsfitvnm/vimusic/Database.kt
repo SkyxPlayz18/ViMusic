@@ -404,6 +404,9 @@ fun getMaxPosition(playlistId: Long): Int?
     return if (min == null) 0 else min - 1
     }
 
+    @Query("SELECT * FROM Playlist WHERE name = :name LIMIT 1")
+fun getPlaylistByName(name: String): Playlist?
+
 @Transaction
 fun addMediaItemsToPlaylistAtTop(playlist: Playlist, mediaItems: List<MediaItem>) {
     val playlistId = insert(playlist).takeIf { it != -1L } ?: playlist.id
@@ -794,8 +797,8 @@ fun updateSongPositions(
     @Insert(onConflict = OnConflictStrategy.ABORT)
     fun insert(queuedMediaItems: List<QueuedMediaItem>)
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    fun insertSongPlaylistMaps(songPlaylistMaps: List<SongPlaylistMap>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+fun insertSongPlaylistMap(map: SongPlaylistMap)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insert(album: Album, songAlbumMap: SongAlbumMap)
