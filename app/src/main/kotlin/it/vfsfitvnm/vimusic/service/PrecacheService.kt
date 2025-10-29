@@ -223,7 +223,7 @@ override fun getDownloadManager(): DownloadManager {
 
         try {
             val cacheFolder = File(applicationContext.cacheDir, "exoplayer")
-            val cachedFile = File(cacheFolder, download.request.id)
+            val cachedFile = File(cache.cacheDir ?: context.cacheDir.resolve("exoplayer"), download.request.id)
 
             if (cachedFile.exists()) {
                 logDebug(this@PrecacheService, "🎵 File tersimpan di cache: ${cachedFile.absolutePath} (${cachedFile.length()} bytes)")
@@ -236,23 +236,18 @@ override fun getDownloadManager(): DownloadManager {
 
         // update database biar muncul di album offline
         runBlocking {
-            runCatching {
-                val song = Database.instance.getSongById(download.request.id)
-                if (song != null) {
-                    val updated = song.copy(likedAt = song.likedAt ?: System.currentTimeMillis())
-                    Database.instance.upsert(updated)
-                    logDebug(this@PrecacheService, "🗂️ DB updated: ${song.title} ditandai cached")
-                } else {
-                    logDebug(this@PrecacheService, "⚠️ Song ${download.request.id} tidak ditemukan di database")
-                }
-            }.onFailure {
-                logDebug(this@PrecacheService, "DB update error: ${it.stackTraceToString()}")
-            }
+            CoroutineScope(Dispatchers.IO).launch {
+    try {
+        val song = Database.instance.getSongById(download.request.id)
+        if (song != null) {
+            val updated = song.copy(isCached = true)
+            Database.instance.upsert(updated)
+            logDebug(this@PrecacheService, "🗂️ DB updated: ${song.title} ditandai cached")
+        } else {
+            logDebug(this@PrecacheService, "⚠️ Song ${download.request.id} tidak ditemukan di DB")
         }
-    }
-
-    if (download.state == Download.STATE_FAILED) {
-        logDebug(this@PrecacheService, "❌ Download gagal: ${finalException?.stackTraceToString()}")
+    } catch (e: Exception) {
+        logDebug(this@PrecacheService, "DB update error: ${e.stackTraceToString()}")
     }
             }
             override fun onDownloadRemoved(downloadManager: DownloadManager, download: Download) {
