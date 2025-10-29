@@ -252,11 +252,13 @@ override fun getDownloadManager(): DownloadManager {
                             val offlinePlaylist = Database.instance.getPlaylistByName("Offline Songs")
     ?: Database.instance.insert(Playlist(name = "Offline Songs", id = UUID.randomUUID().toString()))
 
-Database.instance.insertSongPlaylistMap(
-    SongPlaylistMap(
-        songId = song.id,
-        playlistId = offlinePlaylist.id,
-        position = Database.instance.getMaxPosition(offlinePlaylist.id) + 1
+    Database.instance.insertSongPlaylistMaps(
+    listOf(
+        SongPlaylistMap(
+            songId = song.id,
+            playlistId = offlinePlaylist.id,
+            position = (Database.instance.getMaxPosition(offlinePlaylist.id) ?: 0) + 1
+        )
     )
 )
                         } ?: logDebug(this@PrecacheService, "⚠️ Song $id gak ketemu di DB.")
