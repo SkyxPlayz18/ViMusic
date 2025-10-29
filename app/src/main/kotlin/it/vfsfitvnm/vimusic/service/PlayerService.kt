@@ -1353,21 +1353,26 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
         private const val DEFAULT_CHUNK_LENGTH = 512 * 1024L
         
     fun createDatabaseProvider(context: Context) = StandaloneDatabaseProvider(context)
-        fun createCache(
-            context: Context,
-            directoryName: String = DEFAULT_CACHE_DIRECTORY,
-            size: ExoPlayerDiskCacheSize = DataPreferences.exoPlayerDiskCacheMaxSize
-        ) = with(context) {
-            val cacheEvictor = when (size) {
-                ExoPlayerDiskCacheSize.Unlimited -> NoOpCacheEvictor()
-                else -> LeastRecentlyUsedCacheEvictor(size.bytes)
-            }
+    @Volatile
+    var cacheInstance: Cache? = null
+        private set
 
-            val directory = cacheDir.resolve(directoryName).apply {
-                if (!exists()) mkdir()
-            }
+    fun createCache(context: Context): Cache {
+        val existing = cacheInstance
+        if (existing != null) return existing
 
-            SimpleCache(directory, cacheEvictor, createDatabaseProvider(context))
+        synchronized(this) {
+            cacheInstance?.let { return it }
+            val dir = context.cacheDir.resolve("exoplayer").apply { if (!exists()) mkdirs() }
+            val cache = SimpleCache(
+                dir,
+                LeastRecentlyUsedCacheEvictor(DataPreferences.exoPlayerDiskCacheMaxSize.bytes),
+                StandaloneDatabaseProvider(context)
+            )
+            cacheInstance = cache
+            return cache
+        }
+    }
         }
         
     
