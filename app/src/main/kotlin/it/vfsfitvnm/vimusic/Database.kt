@@ -798,8 +798,8 @@ fun updateSongPositions(
     fun insert(queuedMediaItems: List<QueuedMediaItem>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-fun insertSongPlaylistMap(map: SongPlaylistMap: List<SongPlaylistMap>)
-
+    fun insertSongPlaylistMaps(songPlaylistMaps: List<SongPlaylistMap>)
+    
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insert(album: Album, songAlbumMap: SongAlbumMap)
 
