@@ -216,38 +216,53 @@ override fun getDownloadManager(): DownloadManager {
     download: Download,
     finalException: Exception?
 ) {
-    logDebug(this@PrecacheService, "onDownloadChanged: ${download.request.id}, state=${download.state}")
+    val id = download.request.id
+    logDebug(this, "onDownloadChanged: $id, state=${download.state}")
 
     if (download.state == Download.STATE_COMPLETED) {
-        logDebug(this@PrecacheService, "✅ Download selesai untuk ${download.request.id}")
+        logDebug(this, "✅ Download selesai untuk $id")
 
-        try {
-            val cacheFolder = File(applicationContext.cacheDir, "exoplayer")
-            val cachedFile = File(cacheFolder, download.request.id)
+        // Jalankan kerja berat di coroutine (biar gak kena Room error)
+        coroutineScope.launch {
+            try {
+                // Ambil instance cache (pakai dari PlayerService biar konsisten)
+                val cacheInstance = PlayerService.cacheInstance ?: PlayerService.createCache(applicationContext)
 
-            if (cachedFile.exists()) {
-                logDebug(this@PrecacheService, "🎵 File tersimpan di cache: ${cachedFile.absolutePath} (${cachedFile.length()} bytes)")
-            } else {
-                logDebug(this@PrecacheService, "⚠️ File ${download.request.id} tidak ditemukan di folder cache!")
-            }
-        } catch (e: Exception) {
-            logDebug(this@PrecacheService, "Error cek file cache: ${e.stackTraceToString()}")
-        }
-
-        // update database biar muncul di album offline
-        runBlocking {
-            runCatching {
-                val song = Database.instance.getSongById(download.request.id)
-                if (song != null) {
-                    val updated = song.copy(likedAt = song.likedAt ?: System.currentTimeMillis())
-                    Database.instance.upsert(updated)
-                    logDebug(this@PrecacheService, "🗂️ DB updated: ${song.title} ditandai cached")
-                } else {
-                    logDebug(this@PrecacheService, "⚠️ Song ${download.request.id} tidak ditemukan di database")
+                // Cek apakah file-nya beneran ada di cache
+                val isCached = try {
+                    val spans = cacheInstance.getCachedSpans(id)
+                    spans != null && spans.isNotEmpty()
+                } catch (e: Exception) {
+                    logDebug(this@PrecacheService, "Error cek cache: ${e.stackTraceToString()}")
+                    false
                 }
-            }.onFailure {
-                logDebug(this@PrecacheService, "DB update error: ${it.stackTraceToString()}")
+
+                if (isCached) {
+                    logDebug(this@PrecacheService, "🎵 Lagu $id ada di cache.")
+
+                    // Update database dengan aman (Room gak boleh di main thread)
+                    try {
+                        val song = Database.instance.getSongById(id)
+                        song?.let {
+                            Database.instance.upsert(it)
+                            logDebug(this@PrecacheService, "🗂️ DB updated: ${it.title} disimpan offline.")
+                        } ?: logDebug(this@PrecacheService, "⚠️ Song $id gak ketemu di DB.")
+                    } catch (e: Exception) {
+                        logDebug(this@PrecacheService, "DB error: ${e.stackTraceToString()}")
+                    }
+                } else {
+                    logDebug(this@PrecacheService, "⚠️ Lagu $id gak ditemukan di cache folder.")
+                }
+            } catch (e: Exception) {
+                logDebug(this@PrecacheService, "Error umum di coroutine: ${e.stackTraceToString()}")
             }
+        }
+    }
+
+    if (download.state == Download.STATE_FAILED) {
+        logDebug(this, "❌ Download gagal: ${finalException?.stackTraceToString()}")
+    }
+}
             override fun onDownloadRemoved(downloadManager: DownloadManager, download: Download) {
                 logDebug(this@PrecacheService, "onDownloadRemoved: ${download.request.id}")
                 downloadQueue.trySend(downloadManager)
