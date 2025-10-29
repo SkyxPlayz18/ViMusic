@@ -985,7 +985,7 @@ fun insertPreserve(mediaItem: MediaItem, block: (Song) -> Song = { it }) {
         PipedSession::class
     ],
     views = [SortedSongPlaylistMap::class],
-    version = 33,
+    version = 34,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
