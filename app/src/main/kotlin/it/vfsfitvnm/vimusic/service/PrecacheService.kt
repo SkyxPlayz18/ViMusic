@@ -246,6 +246,16 @@ override fun getDownloadManager(): DownloadManager {
                         song?.let {
                             Database.instance.upsert(it)
                             logDebug(this@PrecacheService, "🗂️ DB updated: ${it.title} disimpan offline.")
+                            val offlinePlaylist = Database.instance.getPlaylistByName("Offline Songs")
+    ?: Database.instance.insert(Playlist(name = "Offline Songs", id = UUID.randomUUID().toString()))
+
+Database.instance.insertSongPlaylistMap(
+    SongPlaylistMap(
+        songId = song.id,
+        playlistId = offlinePlaylist.id,
+        position = Database.instance.getMaxPosition(offlinePlaylist.id) + 1
+    )
+)
                         } ?: logDebug(this@PrecacheService, "⚠️ Song $id gak ketemu di DB.")
                     } catch (e: Exception) {
                         logDebug(this@PrecacheService, "DB error: ${e.stackTraceToString()}")
