@@ -1330,7 +1330,7 @@ abstract class DatabaseInitializer protected constructor() : RoomDatabase() {
             db.execSQL("ALTER TABLE Song ADD COLUMN isCached INTEGER NOT NULL DEFAULT 0")
         }
     }
-} // <-- akhir class DatabaseInitializer
+} 
 
 @Suppress("unused")
 @TypeConverters
