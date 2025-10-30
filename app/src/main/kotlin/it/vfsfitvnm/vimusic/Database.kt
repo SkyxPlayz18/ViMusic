@@ -1318,9 +1318,8 @@ abstract class DatabaseInitializer protected constructor() : RoomDatabase() {
     }
 
     class From32To33Migration : Migration(32, 33) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("ALTER TABLE Playlist ADD COLUMN sortable INTEGER NOT NULL DEFAULT 1")
-        }
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE Playlist ADD COLUMN sortable INTEGER NOT NULL DEFAULT 1")
     }
 }
 
