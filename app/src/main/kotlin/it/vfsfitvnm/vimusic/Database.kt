@@ -1015,7 +1015,7 @@ fun insertPreserve(mediaItem: MediaItem, block: (Song) -> Song = { it }) {
         AutoMigration(from = 26, to = 27),
         AutoMigration(from = 27, to = 28),
         AutoMigration(from = 28, to = 29),
-        AutoMigration(from = 29, to = 30),
+        AutoMigration(from = 29, to = 30)
     ]
 )
 @TypeConverters(Converters::class)
