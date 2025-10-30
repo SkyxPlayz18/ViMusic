@@ -34,8 +34,10 @@ jobs:
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
 
-      - name: Delete old build cache
-  run: rm -rf ~/.gradle/caches
+      - name: Delete old build cache and Room schemas
+        run: |
+          rm -rf ~/.gradle/caches
+          rm -rf app/schemas
 
       - name: Clean build
         run: ./gradlew clean
