@@ -1328,6 +1328,7 @@ class From33To34Migration : Migration(33, 34) {
         db.execSQL("ALTER TABLE Song ADD COLUMN isCached INTEGER NOT NULL DEFAULT 0")
     }
 }
+}
 
 @Suppress("unused")
 @TypeConverters
