@@ -37,7 +37,6 @@ jobs:
       - name: Delete old build cache and Room schemas
         run: |
           rm -rf ~/.gradle/caches
-          rm -rf app/schemas
 
       - name: Clean build
         run: ./gradlew clean
