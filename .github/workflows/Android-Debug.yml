@@ -34,9 +34,8 @@ jobs:
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
 
-      # ✅ Tambahin langkah ini bro
-      - name: Delete old Room database to force migration
-        run: rm -rf app/build || true
+      - name: Delete old build cache
+  run: rm -rf ~/.gradle/caches
 
       - name: Clean build
         run: ./gradlew clean
