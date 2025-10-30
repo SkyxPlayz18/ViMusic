@@ -146,6 +146,9 @@ interface Database {
     @Query("SELECT * FROM Song WHERE isCached = 1")
 fun offlineSongs(): Flow<List<Song>>
 
+    @Query("UPDATE Song SET isCached = :cached WHERE id = :id")
+fun updateIsCached(id: String, cached: Boolean)
+
     @Suppress("CyclomaticComplexMethod")
     fun songs(sortBy: SongSortBy, sortOrder: SortOrder, isLocal: Boolean = false) = when (sortBy) {
         SongSortBy.PlayTime -> when (sortOrder) {
