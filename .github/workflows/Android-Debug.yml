@@ -34,11 +34,15 @@ jobs:
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
 
+      # ✅ Tambahin langkah ini bro
+      - name: Delete old Room database to force migration
+        run: rm -rf app/build || true
+
       - name: Clean build
         run: ./gradlew clean
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --stacktrace --info
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
