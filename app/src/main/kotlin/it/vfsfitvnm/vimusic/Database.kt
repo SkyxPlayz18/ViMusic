@@ -1318,17 +1318,18 @@ abstract class DatabaseInitializer protected constructor() : RoomDatabase() {
     }
 
     class From32To33Migration : Migration(32, 33) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-        db.execSQL("ALTER TABLE Playlist ADD COLUMN sortable INTEGER NOT NULL DEFAULT 1")
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE Playlist ADD COLUMN sortable INTEGER NOT NULL DEFAULT 1")
+        }
     }
-}
 
-class From33To34Migration : Migration(33, 34) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-        db.execSQL("ALTER TABLE Song ADD COLUMN isCached INTEGER NOT NULL DEFAULT 0")
+    // <-- PASTIKAN INI ADA DI SINI, DI DALAM DatabaseInitializer
+    class From33To34Migration : Migration(33, 34) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE Song ADD COLUMN isCached INTEGER NOT NULL DEFAULT 0")
+        }
     }
-}
-}
+} // <-- akhir class DatabaseInitializer
 
 @Suppress("unused")
 @TypeConverters
