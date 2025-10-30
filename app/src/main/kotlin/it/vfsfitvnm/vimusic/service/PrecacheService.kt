@@ -224,6 +224,7 @@ override fun getDownloadManager(): DownloadManager {
 
     if (download.state == Download.STATE_COMPLETED) {
         logDebug(this@PrecacheService, "✅ Download selesai untuk $id")
+        Database.instance.updateIsCached(id, true)
 
         // Jalankan kerja berat di coroutine (biar gak kena Room error)
         coroutineScope.launch {
