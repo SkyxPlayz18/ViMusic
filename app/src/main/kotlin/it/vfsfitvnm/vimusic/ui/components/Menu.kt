@@ -45,7 +45,6 @@ class MenuState {
         private set
 
     var content by mutableStateOf<@Composable () -> Unit>({})
-        private set
 
     fun display(content: @Composable () -> Unit) {
         this.content = content
