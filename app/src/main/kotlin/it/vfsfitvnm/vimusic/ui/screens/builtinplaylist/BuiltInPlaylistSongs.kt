@@ -226,39 +226,43 @@ DisposableEffect(Unit) {
                     modifier = Modifier
                         .combinedClickable(
                             onLongClick = {
-                                menuState.display {
-    when (builtInPlaylist) {
-        BuiltInPlaylist.Offline -> {
-            // Ambil context dulu (harus di luar onClick)
-            val context = LocalContext.current
+    menuState.display {
+        when (builtInPlaylist) {
+            BuiltInPlaylist.Favorites -> NonQueuedMediaItemMenu(
+                mediaItem = song.asMediaItem,
+                onDismiss = menuState::hide
+            )
 
-            InHistoryMediaItemMenu(
+            BuiltInPlaylist.Top -> NonQueuedMediaItemMenu(
+                mediaItem = song.asMediaItem,
+                onDismiss = menuState::hide
+            )
+
+            BuiltInPlaylist.History -> InHistoryMediaItemMenu(
                 song = song,
                 onDismiss = menuState::hide
             )
 
-            // 🔹 Tambahan menu hapus offline
-            menuState.addCustomAction(
-                title = "Delete From Offline",
-                icon = R.drawable.delete,
-                onClick = {
-                    // di sini tinggal pakai context yang udah dideklarasi di atas
-                    deleteOfflineSong(context, song.id)
-                }
-            )
+            BuiltInPlaylist.Offline -> {
+                val context = LocalContext.current
+
+                InHistoryMediaItemMenu(
+                    song = song,
+                    onDismiss = menuState::hide
+                )
+
+                // 🔹 Tambahan menu hapus offline
+                menuState.addCustomAction(
+                    title = "Hapus dari Offline",
+                    icon = R.drawable.delete,
+                    onClick = {
+                        deleteOfflineSong(context, song.id)
+                    }
+                )
+            }
         }
     }
-                                }
-
-                                        BuiltInPlaylist.Favorites,
-                                        BuiltInPlaylist.Top,
-                                        BuiltInPlaylist.History -> NonQueuedMediaItemMenu(
-                                            mediaItem = song.asMediaItem,
-                                            onDismiss = menuState::hide
-                                        )
-                                    }
-                                }
-                            },
+},
                             onClick = {
                                 binder?.stopRadio()
                                 binder?.player?.forcePlayAtIndex(
