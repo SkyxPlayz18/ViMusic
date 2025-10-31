@@ -27,6 +27,7 @@ import it.vfsfitvnm.vimusic.utils.ActionReceiver
 import it.vfsfitvnm.vimusic.utils.download
 import it.vfsfitvnm.vimusic.utils.intent
 import it.vfsfitvnm.vimusic.utils.toast
+import it.vfsfitvnm.vimusic.utils.copyCachedFileToPermanentStorage
 import it.vfsfitvnm.vimusic.models.Playlist
 import it.vfsfitvnm.vimusic.models.SongPlaylistMap
 import kotlinx.coroutines.CancellationException
@@ -228,39 +229,43 @@ override fun getDownloadManager(): DownloadManager {
 
         // Jalankan kerja berat di coroutine (biar gak kena Room error)
         coroutineScope.launch {
-        try {
-            val cacheInstance = PlayerService.cacheInstance ?: PlayerService.createCache(applicationContext)
-            val spans = cacheInstance.getCachedSpans(id)
-            if (spans.isNotEmpty()) {
-                // 🔹 Salin cache ke penyimpanan permanen
-                val copied = copyCachedFileToPermanentStorage(
-                    context = this@PrecacheService,
-                    cacheDir = cacheInstance.cacheDir,
-                    cacheKey = id
-                )
+    try {
+        val cacheInstance = PlayerService.cacheInstance ?: PlayerService.createCache(applicationContext)
+        val spans = cacheInstance.getCachedSpans(id)
+        if (spans.isNotEmpty()) {
+            // 🔹 Cari lokasi folder cache-nya (biasanya internal exoCache)
+            val cacheDir = File(cacheInstance.cacheSpace.toString()).parentFile
+                ?: File(applicationContext.cacheDir, "exoCache")
 
-                if (copied != null) {
-                    logDebug(this@PrecacheService, "📁 Lagu $id disalin ke: ${copied.absolutePath}")
+            // 🔹 Salin cache ke penyimpanan permanen (storage user)
+            val copied = copyCachedFileToPermanentStorage(
+                context = this@PrecacheService,
+                cacheDir = cacheDir,
+                cacheKey = id
+            )
 
-                    // 🔹 Tandai di database sebagai "offline tersedia"
-                    try {
-                        val song = Database.instance.getSongById(id)
-                        song?.let {
-                            val updated = it.copy(isDownloaded = true)
-                            Database.instance.upsert(updated)
-                            logDebug(this@PrecacheService, "🗂️ DB updated: ${it.title} ditandai offline")
-                        }
-                    } catch (e: Exception) {
-                        logDebug(this@PrecacheService, "DB error: ${e.stackTraceToString()}")
+            if (copied != null) {
+                logDebug(this@PrecacheService, "📁 Lagu $id disalin ke: ${copied.path}")
+
+                // 🔹 Update database: tandai sebagai cached + tersimpan offline
+                try {
+                    val song = Database.instance.getSongById(id)
+                    song?.let {
+                        val updated = it.copy(isCached = true) // jangan pake isDownloaded (belum ada)
+                        Database.instance.upsert(updated)
+                        logDebug(this@PrecacheService, "🗂️ DB updated: ${it.title} ditandai offline")
                     }
-                } else {
-                    logDebug(this@PrecacheService, "⚠️ Gagal salin file cache untuk $id")
+                } catch (e: Exception) {
+                    logDebug(this@PrecacheService, "DB error: ${e.stackTraceToString()}")
                 }
+            } else {
+                logDebug(this@PrecacheService, "⚠️ Gagal salin file cache untuk $id")
             }
-        } catch (e: Exception) {
-            logDebug(this@PrecacheService, "Error umum di coroutine: ${e.stackTraceToString()}")
         }
+    } catch (e: Exception) {
+        logDebug(this@PrecacheService, "Error umum di coroutine: ${e.stackTraceToString()}")
     }
+        }
     }
 
     if (download.state == Download.STATE_FAILED) {
