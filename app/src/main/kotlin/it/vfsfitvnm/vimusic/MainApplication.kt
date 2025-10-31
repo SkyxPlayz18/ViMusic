@@ -95,6 +95,7 @@ import it.vfsfitvnm.vimusic.utils.maybeExitPip
 import it.vfsfitvnm.vimusic.utils.setDefaultPalette
 import it.vfsfitvnm.vimusic.utils.shouldBePlaying
 import it.vfsfitvnm.vimusic.utils.toast
+import it.vfsfitvnm.vimusic.utils.verifyOfflineFiles
 import it.vfsfitvnm.compose.persist.LocalPersistMap
 import it.vfsfitvnm.compose.persist.PersistMap
 import it.vfsfitvnm.compose.preferences.PreferencesHolder
