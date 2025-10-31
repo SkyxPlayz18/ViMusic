@@ -234,7 +234,7 @@ DisposableEffect(Unit) {
 
             // 🔹 Tambahan menu hapus offline
             menuState.addCustomAction(
-                title = "Hapus dari Offline",
+                title = "Delete From Offline",
                 icon = R.drawable.delete, // bisa ganti ikon lain kalau nggak ada
                 onClick = {
                     deleteOfflineSong(LocalContext.current, song.id)
