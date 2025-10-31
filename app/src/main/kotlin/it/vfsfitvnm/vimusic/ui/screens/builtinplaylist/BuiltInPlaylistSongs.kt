@@ -73,6 +73,29 @@ fun BuiltInPlaylistSongs(
     var sortBy by rememberSaveable(stateSaver = enumSaver()) { mutableStateOf(SongSortBy.DateAdded) }
     var sortOrder by rememberSaveable(stateSaver = enumSaver()) { mutableStateOf(SortOrder.Descending) }
 
+    val context = LocalContext.current
+
+DisposableEffect(Unit) {
+    val filter = IntentFilter("it.vfsfitvnm.vimusic.DOWNLOAD_COMPLETED")
+    val receiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, intent: Intent?) {
+            if (builtInPlaylist == BuiltInPlaylist.Offline) {
+                // Reload ulang daftar offline
+                songs = emptyList()
+                binder?.let {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        Database.instance.getDownloadedSongs().collect { list ->
+                            songs = list.toImmutableList()
+                        }
+                    }
+                }
+            }
+        }
+    }
+    context.registerReceiver(receiver, filter)
+    onDispose { context.unregisterReceiver(receiver) }
+}
+
     LaunchedEffect(binder, sortBy, sortOrder) {
         when (builtInPlaylist) {
             BuiltInPlaylist.Favorites -> Database.instance.favorites(
