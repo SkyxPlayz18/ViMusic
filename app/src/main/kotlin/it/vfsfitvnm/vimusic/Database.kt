@@ -152,6 +152,9 @@ fun updateIsCached(id: String, cached: Boolean)
 @Query("UPDATE Song SET isDownloaded = :value WHERE id = :id")
 fun updateIsDownloaded(id: String, value: Boolean)
 
+@Query("SELECT * FROM Song WHERE isDownloaded = 1 ORDER BY dateAdded DESC")
+fun getDownloadedSongs(sortBy: SongSortBy, sortOrder: SortOrder): Flow<List<Song>>
+
     @Suppress("CyclomaticComplexMethod")
     fun songs(sortBy: SongSortBy, sortOrder: SortOrder, isLocal: Boolean = false) = when (sortBy) {
         SongSortBy.PlayTime -> when (sortOrder) {
