@@ -53,6 +53,7 @@ import it.vfsfitvnm.core.ui.Dimensions
 import it.vfsfitvnm.core.ui.LocalAppearance
 import it.vfsfitvnm.core.ui.utils.enumSaver
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.cancellable
 import kotlinx.coroutines.flow.combine
@@ -91,7 +92,7 @@ DisposableEffect(Unit) {
         override fun onReceive(ctx: Context?, intent: Intent?) {
             if (builtInPlaylist == BuiltInPlaylist.Offline) {
                 // Reload ulang daftar offline
-                songs = emptyList()
+                songs = persistentListOf()
                 binder?.let {
                     CoroutineScope(Dispatchers.IO).launch {
                         Database.instance.getDownloadedSongs().collect { list ->
