@@ -273,3 +273,32 @@ fun verifyOfflineFiles(context: Context) {
         }
     }
 }
+
+fun deleteOfflineSong(context: Context, songId: String) {
+    try {
+        val offlineDir = context.getOfflineSongDir()
+        val file = File(offlineDir, "$songId.mp3")
+        if (file.exists()) {
+            file.delete()
+            Log.d("OfflineDelete", "🗑️ File ${file.name} berhasil dihapus")
+        }
+
+        // Update database
+        CoroutineScope(Dispatchers.IO).launch {
+            val db = Database.instance
+            val song = db.getSongById(songId)
+            song?.let {
+                val updated = it.copy(isDownloaded = false)
+                db.upsert(updated)
+            }
+        }
+
+        // Kirim broadcast biar UI refresh
+        val intent = Intent("it.vfsfitvnm.vimusic.DOWNLOAD_COMPLETED")
+        intent.putExtra("songId", songId)
+        context.sendBroadcast(intent)
+
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
