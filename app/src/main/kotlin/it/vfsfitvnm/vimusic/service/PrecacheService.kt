@@ -255,6 +255,15 @@ override fun getDownloadManager(): DownloadManager {
                         Database.instance.upsert(updated)
                         logDebug(this@PrecacheService, "🗂️ DB updated: ${it.title} ditandai offline")
                     }
+                    try {
+    // Kirim broadcast biar UI auto-refresh tab Offline
+    val intent = Intent("it.vfsfitvnm.vimusic.DOWNLOAD_COMPLETED")
+    intent.putExtra("songId", id)
+    sendBroadcast(intent)
+    logDebug(this@PrecacheService, "📢 Broadcast refresh dikirim untuk $id")
+} catch (e: Exception) {
+    logDebug(this@PrecacheService, "⚠️ Gagal kirim broadcast: ${e.stackTraceToString()}")
+                    }
                 } catch (e: Exception) {
                     logDebug(this@PrecacheService, "DB error: ${e.stackTraceToString()}")
                 }
