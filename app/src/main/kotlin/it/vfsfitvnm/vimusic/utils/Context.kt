@@ -23,6 +23,7 @@ import androidx.media3.exoplayer.offline.DownloadService.sendAddDownload
 import it.vfsfitvnm.vimusic.BuildConfig
 import it.vfsfitvnm.core.ui.utils.isAtLeastAndroid11
 import it.vfsfitvnm.core.ui.utils.isAtLeastAndroid6
+import java.io.File
 
 inline fun <reified T> Context.intent(): Intent = Intent(this@Context, T::class.java)
 
@@ -125,4 +126,10 @@ inline fun <reified T : DownloadService> Context.download(request: DownloadReque
     sendAddDownload(this, T::class.java, request, true)
 }.recoverCatching {
     sendAddDownload(this, T::class.java, request, false)
+}
+
+fun Context.getOfflineSongDir(): File {
+    val dir = File(getExternalFilesDir(null), "offline_songs")
+    if (!dir.exists()) dir.mkdirs()
+    return dir
 }
