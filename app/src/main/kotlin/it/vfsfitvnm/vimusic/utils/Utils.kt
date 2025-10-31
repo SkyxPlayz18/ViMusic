@@ -32,6 +32,13 @@ import android.content.Context
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import it.vfsfitvnm.vimusic.Database
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
+import java.io.File
+
 
 val Innertube.SongItem.asMediaItem: MediaItem
     get() = MediaItem.Builder()
@@ -249,5 +256,21 @@ fun copyCachedFileToPermanentStorage(
     } catch (e: Exception) {
         e.printStackTrace()
         return null
+    }
+}
+
+fun verifyOfflineFiles(context: Context) {
+    val offlineDir = context.getOfflineSongDir()
+    val db = Database.instance
+
+    CoroutineScope(Dispatchers.IO).launch {
+        val songs = db.getDownloadedSongs().firstOrNull() ?: return@launch
+        songs.forEach { song ->
+            val file = File(offlineDir, "${song.id}.mp3")
+            if (!file.exists()) {
+                val updated = song.copy(isDownloaded = false)
+                db.upsert(updated)
+            }
+        }
     }
 }
