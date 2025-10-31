@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlin.time.Duration
+import java.io.FileInputStream
+import java.io.FileOutputStream
 
 val Innertube.SongItem.asMediaItem: MediaItem
     get() = MediaItem.Builder()
@@ -216,4 +218,27 @@ inline fun <reified T : Throwable> Throwable.findCause(): T? {
     }
 
     return null
+}
+
+fun copyCachedFileToPermanentStorage(
+    context: Context,
+    cacheDir: File,
+    cacheKey: String
+): File? {
+    try {
+        val offlineDir = context.getOfflineSongDir()
+        val cachedFile = cacheDir.walk().firstOrNull { it.name.contains(cacheKey) }
+        if (cachedFile == null) return null
+
+        val targetFile = File(offlineDir, "$cacheKey.mp3")
+        FileInputStream(cachedFile).use { input ->
+            FileOutputStream(targetFile).use { output ->
+                input.copyTo(output)
+            }
+        }
+        return targetFile
+    } catch (e: Exception) {
+        e.printStackTrace()
+        return null
+    }
 }
