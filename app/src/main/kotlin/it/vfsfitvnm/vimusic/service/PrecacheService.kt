@@ -228,39 +228,39 @@ override fun getDownloadManager(): DownloadManager {
 
         // Jalankan kerja berat di coroutine (biar gak kena Room error)
         coroutineScope.launch {
-            try {
-                // Ambil instance cache (pakai dari PlayerService biar konsisten)
-                val cacheInstance = PlayerService.cacheInstance ?: PlayerService.createCache(applicationContext)
+        try {
+            val cacheInstance = PlayerService.cacheInstance ?: PlayerService.createCache(applicationContext)
+            val spans = cacheInstance.getCachedSpans(id)
+            if (spans.isNotEmpty()) {
+                // 🔹 Salin cache ke penyimpanan permanen
+                val copied = copyCachedFileToPermanentStorage(
+                    context = this@PrecacheService,
+                    cacheDir = cacheInstance.cacheDir,
+                    cacheKey = id
+                )
 
-                // Cek apakah file-nya beneran ada di cache
-                val isCached = try {
-                    val spans = cacheInstance.getCachedSpans(id)
-                    spans != null && spans.isNotEmpty()
-                } catch (e: Exception) {
-                    logDebug(this@PrecacheService, "Error cek cache: ${e.stackTraceToString()}")
-                    false
-                }
+                if (copied != null) {
+                    logDebug(this@PrecacheService, "📁 Lagu $id disalin ke: ${copied.absolutePath}")
 
-                if (isCached) {
-                    logDebug(this@PrecacheService, "🎵 Lagu $id ada di cache.")
-
-                    // Update database dengan aman (Room gak boleh di main thread)
+                    // 🔹 Tandai di database sebagai "offline tersedia"
                     try {
                         val song = Database.instance.getSongById(id)
                         song?.let {
-                            Database.instance.upsert(it)
-                            logDebug(this@PrecacheService, "🗂️ DB updated: ${it.title} disimpan offline.")
-                        } ?: logDebug(this@PrecacheService, "⚠️ Song $id gak ketemu di DB.")
+                            val updated = it.copy(isDownloaded = true)
+                            Database.instance.upsert(updated)
+                            logDebug(this@PrecacheService, "🗂️ DB updated: ${it.title} ditandai offline")
+                        }
                     } catch (e: Exception) {
                         logDebug(this@PrecacheService, "DB error: ${e.stackTraceToString()}")
                     }
                 } else {
-                    logDebug(this@PrecacheService, "⚠️ Lagu $id gak ditemukan di cache folder.")
+                    logDebug(this@PrecacheService, "⚠️ Gagal salin file cache untuk $id")
                 }
-            } catch (e: Exception) {
-                logDebug(this@PrecacheService, "Error umum di coroutine: ${e.stackTraceToString()}")
             }
+        } catch (e: Exception) {
+            logDebug(this@PrecacheService, "Error umum di coroutine: ${e.stackTraceToString()}")
         }
+    }
     }
 
     if (download.state == Download.STATE_FAILED) {
