@@ -525,6 +525,7 @@ class MainApplication : Application(), SingletonImageLoader.Factory, Configurati
         Dependencies.init(this)
         MonetCompat.enablePaletteCompat()
         ServiceNotifications.createAll()
+        verifyOfflineFiles(this)
     }
 
     override fun newImageLoader(context: PlatformContext) = ImageLoader.Builder(this)
