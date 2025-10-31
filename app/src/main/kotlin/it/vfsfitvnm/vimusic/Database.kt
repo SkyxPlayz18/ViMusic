@@ -149,6 +149,9 @@ fun offlineSongs(): Flow<List<Song>>
     @Query("UPDATE Song SET isCached = :cached WHERE id = :id")
 fun updateIsCached(id: String, cached: Boolean)
 
+@Query("UPDATE Song SET isDownloaded = :value WHERE id = :id")
+fun updateIsDownloaded(id: String, value: Boolean)
+
     @Suppress("CyclomaticComplexMethod")
     fun songs(sortBy: SongSortBy, sortOrder: SortOrder, isLocal: Boolean = false) = when (sortBy) {
         SongSortBy.PlayTime -> when (sortOrder) {
