@@ -52,6 +52,8 @@ import it.vfsfitvnm.core.data.enums.SortOrder
 import it.vfsfitvnm.core.ui.Dimensions
 import it.vfsfitvnm.core.ui.LocalAppearance
 import it.vfsfitvnm.core.ui.utils.enumSaver
+import it.vfsfitvnm.vimusic.ui.components.addCustomAction
+import it.vfsfitvnm.vimusic.utils.deleteOfflineSong
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -225,22 +227,28 @@ DisposableEffect(Unit) {
                         .combinedClickable(
                             onLongClick = {
                                 menuState.display {
-                                  when (builtInPlaylist) {
-                                   BuiltInPlaylist.Offline -> {
-                                    InHistoryMediaItemMenu(
-                                      song = song,
-                                  onDismiss = menuState::hide
+    when (builtInPlaylist) {
+        BuiltInPlaylist.Offline -> {
+            // Ambil context dulu (harus di luar onClick)
+            val context = LocalContext.current
+
+            InHistoryMediaItemMenu(
+                song = song,
+                onDismiss = menuState::hide
             )
 
             // 🔹 Tambahan menu hapus offline
             menuState.addCustomAction(
                 title = "Delete From Offline",
-                icon = R.drawable.delete, // bisa ganti ikon lain kalau nggak ada
+                icon = R.drawable.delete,
                 onClick = {
-                    deleteOfflineSong(LocalContext.current, song.id)
+                    // di sini tinggal pakai context yang udah dideklarasi di atas
+                    deleteOfflineSong(context, song.id)
                 }
             )
         }
+    }
+                                }
 
                                         BuiltInPlaylist.Favorites,
                                         BuiltInPlaylist.Top,
