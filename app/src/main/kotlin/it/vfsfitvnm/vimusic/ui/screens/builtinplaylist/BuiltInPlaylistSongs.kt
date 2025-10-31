@@ -81,14 +81,9 @@ fun BuiltInPlaylistSongs(
             )
 
             BuiltInPlaylist.Offline ->
-                Database.instance
-                    .songsWithContentLength(
-                        sortBy = sortBy,
-                        sortOrder = sortOrder
-                    )
-                    .map { songs ->
-                        songs.filter { binder?.isCached(it) ?: false }.map { it.song }
-                    }
+    Database.instance
+        .getDownloadedSongs(sortBy = sortBy, sortOrder = sortOrder)
+        .map { it.toImmutableList() }
 
             BuiltInPlaylist.Top -> combine(
                 flow = topListPeriodProperty.stateFlow,
