@@ -225,11 +225,22 @@ DisposableEffect(Unit) {
                         .combinedClickable(
                             onLongClick = {
                                 menuState.display {
-                                    when (builtInPlaylist) {
-                                        BuiltInPlaylist.Offline -> InHistoryMediaItemMenu(
-                                            song = song,
-                                            onDismiss = menuState::hide
-                                        )
+                                  when (builtInPlaylist) {
+                                   BuiltInPlaylist.Offline -> {
+                                    InHistoryMediaItemMenu(
+                                      song = song,
+                                  onDismiss = menuState::hide
+            )
+
+            // 🔹 Tambahan menu hapus offline
+            menuState.addCustomAction(
+                title = "Hapus dari Offline",
+                icon = R.drawable.delete, // bisa ganti ikon lain kalau nggak ada
+                onClick = {
+                    deleteOfflineSong(LocalContext.current, song.id)
+                }
+            )
+        }
 
                                         BuiltInPlaylist.Favorites,
                                         BuiltInPlaylist.Top,
