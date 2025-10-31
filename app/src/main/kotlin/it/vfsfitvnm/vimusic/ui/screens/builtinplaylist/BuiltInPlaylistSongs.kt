@@ -248,6 +248,7 @@ DisposableEffect(Unit) {
             )
         }
     }
+                                }
 
                                         BuiltInPlaylist.Favorites,
                                         BuiltInPlaylist.Top,
