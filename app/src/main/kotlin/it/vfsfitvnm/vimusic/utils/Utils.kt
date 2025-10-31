@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlin.time.Duration
+import android.content.Context
+import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 
@@ -226,16 +228,23 @@ fun copyCachedFileToPermanentStorage(
     cacheKey: String
 ): File? {
     try {
+        // 🔹 Pastikan folder offline sudah ada
         val offlineDir = context.getOfflineSongDir()
+
+        // 🔹 Cari file cache yang sesuai key
         val cachedFile = cacheDir.walk().firstOrNull { it.name.contains(cacheKey) }
         if (cachedFile == null) return null
 
+        // 🔹 Tujuan file di folder offline
         val targetFile = File(offlineDir, "$cacheKey.mp3")
+
+        // 🔹 Salin byte per byte dari cache ke offline
         FileInputStream(cachedFile).use { input ->
             FileOutputStream(targetFile).use { output ->
                 input.copyTo(output)
             }
         }
+
         return targetFile
     } catch (e: Exception) {
         e.printStackTrace()
