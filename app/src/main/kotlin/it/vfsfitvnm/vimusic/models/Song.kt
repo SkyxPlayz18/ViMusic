@@ -22,7 +22,8 @@ data class Song(
     @ColumnInfo(defaultValue = "false")
     val explicit: Boolean = false,
     @ColumnInfo(defaultValue = "0")
-    val isCached: Boolean = false
+    val isCached: Boolean = false,
+    val isDownloaded: Boolean = false
 ) {
     fun toggleLike() = copy(likedAt = if (likedAt == null) System.currentTimeMillis() else null)
 }
