@@ -82,7 +82,7 @@ fun BuiltInPlaylistSongs(
 
             BuiltInPlaylist.Offline ->
     Database.instance
-        .getDownloadedSongs(sortBy = sortBy, sortOrder = sortOrder)
+        .getDownloadedSongs()
         .map { it.toImmutableList() }
 
             BuiltInPlaylist.Top -> combine(
