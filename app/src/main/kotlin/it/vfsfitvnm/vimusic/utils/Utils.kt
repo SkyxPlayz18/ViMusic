@@ -315,3 +315,12 @@ fun deleteOfflineSong(context: Context, songId: String) {
         e.printStackTrace()
     }
 }
+
+fun safeLogToFile(context: Context, message: String) {
+    try {
+        val logFile = File(context.getExternalFilesDir(null), "debug_log.txt")
+        logFile.appendText("${System.currentTimeMillis()} : $message\n")
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
