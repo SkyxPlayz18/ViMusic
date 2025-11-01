@@ -70,6 +70,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.app.AlertDialog
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalCoroutinesApi::class)
 @Composable
@@ -257,11 +258,11 @@ DisposableEffect(Unit) {
     icon = R.drawable.delete,
     onClick = {
         AlertDialog.Builder(context)
-            .setTitle("Delete Offline Songs?")
-            .setMessage("This Song Will Be Removed From Offline.")
-            .setPositiveButton("Delete") { _, _ ->
+            .setTitle("Delete Offline Song?")
+            .setMessage("This Song Will Be Delete From Album Offline.")
+            .setPositiveButton("Delete", { dialogInterface, which ->
                 deleteOfflineSong(context, song.id)
-            }
+            })
             .setNegativeButton("Cancel", null)
             .show()
         menuState.hide()
