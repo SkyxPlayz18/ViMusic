@@ -29,7 +29,6 @@ import it.vfsfitvnm.vimusic.utils.download
 import it.vfsfitvnm.vimusic.utils.intent
 import it.vfsfitvnm.vimusic.utils.toast
 import it.vfsfitvnm.vimusic.utils.copyCachedFileToPermanentStorage
-import it.vfsfitvnm.vimusic.utils.safeLogToFile
 import it.vfsfitvnm.vimusic.models.Playlist
 import it.vfsfitvnm.vimusic.models.SongPlaylistMap
 import kotlinx.coroutines.CancellationException
