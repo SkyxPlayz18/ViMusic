@@ -177,6 +177,7 @@ override fun getDownloadManager(): DownloadManager {
         toast(getString(R.string.error_pre_cache))
     }
 
+    // 🔹 Tunggu cache siap
     val cache = BlockingDeferredCache {
         suspendCoroutine { cont ->
             waiters += { cont.resume(Unit) }
@@ -189,6 +190,7 @@ override fun getDownloadManager(): DownloadManager {
         }
     }
 
+    // 🔹 Update progress download
     progressUpdaterJob?.cancel()
     progressUpdaterJob = coroutineScope.launch {
         logDebug(this@PrecacheService, "ProgressUpdaterJob mulai jalan")
@@ -201,6 +203,7 @@ override fun getDownloadManager(): DownloadManager {
     }
 
     logDebug(this, "DownloadManager berhasil dibuat")
+
     return DownloadManager(
         this,
         PlayerService.createDatabaseProvider(this),
@@ -211,80 +214,81 @@ override fun getDownloadManager(): DownloadManager {
         maxParallelDownloads = 3
         minRetryCount = 1
         requirements = Requirements(Requirements.NETWORK)
+
         addListener(object : DownloadManager.Listener {
+
             override fun onIdle(downloadManager: DownloadManager) {
                 logDebug(this@PrecacheService, "DownloadManager idle")
                 mutableDownloadState.update { false }
             }
+
             override fun onDownloadChanged(
-    downloadManager: DownloadManager,
-    download: Download,
-    finalException: Exception?
-) {
-    val id = download.request.id
-    logDebug(this@PrecacheService, "onDownloadChanged: $id, state=${download.state}")
+                downloadManager: DownloadManager,
+                download: Download,
+                finalException: Exception?
+            ) {
+                val id = download.request.id
+                logDebug(this@PrecacheService, "onDownloadChanged: $id, state=${download.state}")
 
-    if (download.state == Download.STATE_COMPLETED) {
-        logDebug(this@PrecacheService, "✅ Download selesai untuk $id")
-        Database.instance.updateIsCached(id, true)
+                if (download.state == Download.STATE_COMPLETED) {
+                    logDebug(this@PrecacheService, "✅ Download selesai untuk $id")
+                    Database.instance.updateIsCached(id, true)
 
-        // Jalankan kerja berat di coroutine (biar gak kena Room error)
-        coroutineScope.launch {
-    try {
-        val cacheInstance = PlayerService.cacheInstance ?: PlayerService.createCache(applicationContext)
-        val spans = cacheInstance.getCachedSpans(id)
-        if (spans.isNotEmpty()) {
-            // 🔹 Cari lokasi folder cache-nya (biasanya internal exoCache)
-            val cacheDir = File(cacheInstance.cacheSpace.toString()).parentFile
-                ?: File(applicationContext.cacheDir, "exoCache")
+                    coroutineScope.launch {
+                        try {
+                            val cacheInstance = PlayerService.cacheInstance ?: PlayerService.createCache(applicationContext)
+                            val spans = cacheInstance.getCachedSpans(id)
+                            if (spans.isNotEmpty()) {
+                                val cacheDir = File(cacheInstance.cacheSpace.toString()).parentFile
+                                    ?: File(applicationContext.cacheDir, "exoCache")
 
-            // 🔹 Salin cache ke penyimpanan permanen (storage user)
-            try {
-    // 🔹 Salin cache ke penyimpanan permanen (storage user)
-    val copied = copyCachedFileToPermanentStorage(
-        context = this@PrecacheService,
-        cacheDir = cacheDir,
-        cacheKey = id
-    )
+                                try {
+                                    val copied = copyCachedFileToPermanentStorage(
+                                        context = this@PrecacheService,
+                                        cacheDir = cacheDir,
+                                        cacheKey = id
+                                    )
 
-    if (copied != null) {
-        logDebug(this@PrecacheService, "📁 Lagu $id disalin ke: ${copied.path}")
+                                    if (copied != null) {
+                                        logDebug(this@PrecacheService, "📁 Lagu $id disalin ke: ${copied.path}")
 
-        // 🔹 Update database: tandai sebagai cached + tersimpan offline
-        try {
-            val song = Database.instance.getSongById(id)
-            song?.let {
-                val updated = it.copy(isCached = true)
-                Database.instance.upsert(updated)
-                logDebug(this@PrecacheService, "🗂️ DB updated: ${it.title} ditandai offline")
+                                        val song = Database.instance.getSongById(id)
+                                        song?.let {
+                                            val updated = it.copy(isCached = true)
+                                            Database.instance.upsert(updated)
+                                            logDebug(this@PrecacheService, "🗂️ DB updated: ${it.title} ditandai offline")
+                                        }
+
+                                        // Broadcast ke UI
+                                        try {
+                                            val intent = Intent("it.vfsfitvnm.vimusic.DOWNLOAD_COMPLETED")
+                                            intent.putExtra("songId", id)
+                                            sendBroadcast(intent)
+                                            logDebug(this@PrecacheService, "📢 Broadcast refresh dikirim untuk $id")
+                                        } catch (e: Exception) {
+                                            logDebug(this@PrecacheService, "⚠️ Gagal kirim broadcast: ${e.stackTraceToString()}")
+                                        }
+
+                                    } else {
+                                        logDebug(this@PrecacheService, "⚠️ Gagal salin file cache untuk $id")
+                                    }
+
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                    logDebug(this@PrecacheService, "❌ ERROR saat menyalin lagu ke offline: ${e.message}")
+                                }
+                            }
+                        } catch (e: Exception) {
+                            logDebug(this@PrecacheService, "Error umum di coroutine: ${e.stackTraceToString()}")
+                        }
+                    }
+                }
+
+                if (download.state == Download.STATE_FAILED) {
+                    logDebug(this@PrecacheService, "❌ Download gagal: ${finalException?.stackTraceToString()}")
+                }
             }
 
-            // 🔹 Kirim broadcast biar UI auto-refresh tab Offline
-            try {
-                val intent = Intent("it.vfsfitvnm.vimusic.DOWNLOAD_COMPLETED")
-                intent.putExtra("songId", id)
-                sendBroadcast(intent)
-                logDebug(this@PrecacheService, "📢 Broadcast refresh dikirim untuk $id")
-            } catch (e: Exception) {
-                logDebug(this@PrecacheService, "⚠️ Gagal kirim broadcast: ${e.stackTraceToString()}")
-            }
-        } catch (e: Exception) {
-            logDebug(this@PrecacheService, "DB error: ${e.stackTraceToString()}")
-        }
-    } else {
-        logDebug(this@PrecacheService, "⚠️ Gagal salin file cache untuk $id")
-    }
-} catch (e: Exception) {
-    e.printStackTrace()
-    logDebug(this@PrecacheService, "❌ ERROR saat menyalin lagu ke offline: ${e.message}")
-            )
-            }
-        }
-
-    if (download.state == Download.STATE_FAILED) {
-        logDebug(this@PrecacheService, "❌ Download gagal: ${finalException?.stackTraceToString()}")
-    }
-            }
             override fun onDownloadRemoved(downloadManager: DownloadManager, download: Download) {
                 logDebug(this@PrecacheService, "onDownloadRemoved: ${download.request.id}")
                 downloadQueue.trySend(downloadManager)
@@ -292,6 +296,7 @@ override fun getDownloadManager(): DownloadManager {
         })
     }
 }
+
 
     override fun getScheduler() = WorkManagerScheduler(this, DOWNLOAD_WORK_NAME)
 
