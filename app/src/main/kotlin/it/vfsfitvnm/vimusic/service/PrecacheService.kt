@@ -277,7 +277,9 @@ override fun getDownloadManager(): DownloadManager {
 } catch (e: Exception) {
     e.printStackTrace()
     logDebug(this@PrecacheService, "❌ ERROR saat menyalin lagu ke offline: ${e.message}")
+            )
             }
+        }
 
     if (download.state == Download.STATE_FAILED) {
         logDebug(this@PrecacheService, "❌ Download gagal: ${finalException?.stackTraceToString()}")
