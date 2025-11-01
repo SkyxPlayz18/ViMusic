@@ -261,18 +261,29 @@ fun copyCachedFileToPermanentStorage(
 }
 
 fun verifyOfflineFiles(context: Context) {
-    val offlineDir = context.getOfflineSongDir()
-    val db = Database.instance
+    try {
+        val offlineDir = context.getOfflineSongDir()
+        val db = Database.instance ?: return
 
-    CoroutineScope(Dispatchers.IO).launch {
-        val songs = db.getDownloadedSongs().firstOrNull() ?: return@launch
-        songs.forEach { song ->
-            val file = File(offlineDir, "${song.id}.mp3")
-            if (!file.exists()) {
-                val updated = song.copy(isDownloaded = false)
-                db.upsert(updated)
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val songs = db.getDownloadedSongs().firstOrNull() ?: return@launch
+
+                songs.forEach { song ->
+                    val file = File(offlineDir, "${song.id}.mp3")
+                    if (!file.exists()) {
+                        val updated = song.copy(isDownloaded = false)
+                        db.upsert(updated)
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Log.e("verifyOfflineFiles", "Gagal memverifikasi offline files (dalam coroutine): ${e.message}")
             }
         }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        Log.e("verifyOfflineFiles", "Gagal memverifikasi offline files: ${e.message}")
     }
 }
 
