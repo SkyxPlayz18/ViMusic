@@ -239,28 +239,29 @@ fun copyCachedFileToPermanentStorage(
     cacheDir: File,
     cacheKey: String
 ): File? {
-    try {
-        // 🔹 Pastikan folder offline sudah ada
-        val offlineDir = context.getOfflineSongDir()
+    return try {
+        logDebug(context, "🚀 Mulai salin file cache: key=$cacheKey")
 
-        // 🔹 Cari file cache yang sesuai key
-        val cachedFile = cacheDir.walk().firstOrNull { it.name.contains(cacheKey) }
-        if (cachedFile == null) return null
-
-        // 🔹 Tujuan file di folder offline
-        val targetFile = File(offlineDir, "$cacheKey.mp3")
-
-        // 🔹 Salin byte per byte dari cache ke offline
-        FileInputStream(cachedFile).use { input ->
-            FileOutputStream(targetFile).use { output ->
-                input.copyTo(output)
-            }
+        val srcFile = File(cacheDir, cacheKey)
+        if (!srcFile.exists()) {
+            logDebug(context, "❌ File cache tidak ditemukan: ${srcFile.path}")
+            return null
         }
 
-        return targetFile
+        val dstDir = context.getOfflineSongDir()
+        if (!dstDir.exists()) {
+            dstDir.mkdirs()
+            logDebug(context, "📂 Folder offline dibuat: ${dstDir.path}")
+        }
+
+        val dstFile = File(dstDir, "$cacheKey.mp3")
+        srcFile.copyTo(dstFile, overwrite = true)
+
+        logDebug(context, "✅ File disalin ke: ${dstFile.path}")
+        dstFile
     } catch (e: Exception) {
-        e.printStackTrace()
-        return null
+        logDebug(context, "💥 ERROR di copyCachedFileToPermanentStorage: ${e.stackTraceToString()}")
+        null
     }
 }
 
@@ -315,15 +316,6 @@ fun deleteOfflineSong(context: Context, songId: String) {
         intent.putExtra("songId", songId)
         context.sendBroadcast(intent)
 
-    } catch (e: Exception) {
-        e.printStackTrace()
-    }
-}
-
-fun safeLogToFile(context: Context, message: String) {
-    try {
-        val logFile = File(context.getExternalFilesDir(null), "debug_log.txt")
-        logFile.appendText("${System.currentTimeMillis()} : $message\n")
     } catch (e: Exception) {
         e.printStackTrace()
     }
