@@ -244,7 +244,6 @@ override fun getDownloadManager(): DownloadManager {
                                     ?: File(applicationContext.cacheDir, "exoCache")
 
                                 try {
-    safeLogToFile(this@PrecacheService, "Mulai salin file cache: id=$id, cacheDir=${cacheDir.absolutePath}")
     val copied = copyCachedFileToPermanentStorage(
         context = this@PrecacheService,
         cacheDir = cacheDir,
@@ -252,7 +251,6 @@ override fun getDownloadManager(): DownloadManager {
     )
 
     if (copied != null) {
-        safeLogToFile(this@PrecacheService, "File $id berhasil disalin ke ${copied.absolutePath}")
         logDebug(this@PrecacheService, "📁 Lagu $id disalin ke: ${copied.path}")
 
                                         val song = Database.instance.getSongById(id)
