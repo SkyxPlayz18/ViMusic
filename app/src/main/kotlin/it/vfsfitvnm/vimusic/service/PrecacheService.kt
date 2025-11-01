@@ -240,9 +240,7 @@ override fun getDownloadManager(): DownloadManager {
                             val cacheInstance = PlayerService.cacheInstance ?: PlayerService.createCache(applicationContext)
                             val spans = cacheInstance.getCachedSpans(id)
                             if (spans.isNotEmpty()) {
-                                val cacheDir = File(cacheInstance.cacheSpace.toString()).parentFile
-                                    ?: File(applicationContext.cacheDir, "exoCache")
-
+                                val cacheDir = cacheInstance.cacheDir ?: File(applicationContext.cacheDir, "exoCache")
                                 try {
     val copied = copyCachedFileToPermanentStorage(
         context = this@PrecacheService,
