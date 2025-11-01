@@ -29,6 +29,7 @@ import it.vfsfitvnm.vimusic.utils.download
 import it.vfsfitvnm.vimusic.utils.intent
 import it.vfsfitvnm.vimusic.utils.toast
 import it.vfsfitvnm.vimusic.utils.copyCachedFileToPermanentStorage
+import it.vfsfitvnm.vimusic.utils.safeLogToFile
 import it.vfsfitvnm.vimusic.models.Playlist
 import it.vfsfitvnm.vimusic.models.SongPlaylistMap
 import kotlinx.coroutines.CancellationException
@@ -243,14 +244,16 @@ override fun getDownloadManager(): DownloadManager {
                                     ?: File(applicationContext.cacheDir, "exoCache")
 
                                 try {
-                                    val copied = copyCachedFileToPermanentStorage(
-                                        context = this@PrecacheService,
-                                        cacheDir = cacheDir,
-                                        cacheKey = id
-                                    )
+    safeLogToFile(this@PrecacheService, "Mulai salin file cache: id=$id, cacheDir=${cacheDir.absolutePath}")
+    val copied = copyCachedFileToPermanentStorage(
+        context = this@PrecacheService,
+        cacheDir = cacheDir,
+        cacheKey = id
+    )
 
-                                    if (copied != null) {
-                                        logDebug(this@PrecacheService, "📁 Lagu $id disalin ke: ${copied.path}")
+    if (copied != null) {
+        safeLogToFile(this@PrecacheService, "File $id berhasil disalin ke ${copied.absolutePath}")
+        logDebug(this@PrecacheService, "📁 Lagu $id disalin ke: ${copied.path}")
 
                                         val song = Database.instance.getSongById(id)
                                         song?.let {
