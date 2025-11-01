@@ -253,12 +253,20 @@ DisposableEffect(Unit) {
 
                 // 🔹 Tambahan menu hapus offline
                 menuState.addCustomAction(
-                    title = "Hapus dari Offline",
-                    icon = R.drawable.delete,
-                    onClick = {
-                        deleteOfflineSong(context, song.id)
-                    }
-                )
+    title = "Delete From Offline",
+    icon = R.drawable.delete,
+    onClick = {
+        AlertDialog.Builder(context)
+            .setTitle("Delete Offline Songs?")
+            .setMessage("This Song Will Be Removed From Offline.")
+            .setPositiveButton("Delete") { _, _ ->
+                deleteOfflineSong(context, song.id)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+        menuState.hide()
+    }
+)
             }
         }
     }
