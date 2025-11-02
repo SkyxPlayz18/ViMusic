@@ -324,12 +324,12 @@ fun deleteOfflineSong(context: Context, songId: String) {
         e.printStackTrace()
 
 
-        private fun logDebug(context: Context, message: String) {
+        fun logDebug(context: Context, message: String) {
     try {
         val logDir = File("/storage/emulated/0/ViMusic_logs")
         if (!logDir.exists()) logDir.mkdirs()
 
-        val logFile = File(logDir, "ViMusic_debug_utils.kt.txt")
+        val logFile = File(logDir, "ViMusic_debug_utils.txt")
 
         val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
         logFile.appendText("[$timestamp] $message\n")
@@ -337,5 +337,3 @@ fun deleteOfflineSong(context: Context, songId: String) {
         e.printStackTrace()
     }
         }
-    }
-}
