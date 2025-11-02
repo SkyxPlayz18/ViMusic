@@ -284,12 +284,14 @@ fun verifyOfflineFiles(context: Context) {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                logDebug(context"verifyOfflineFiles", "Gagal memverifikasi offline files (dalam coroutine): ${e.message}")
+                log.e("verifyOfflineFiles", "Gagal memverifikasi offline files (dalam coroutine): ${e.message}")
+                logDebug(context, "Gagal memverifikasi Offline Files (Dalam Coroutine): ${e.message}")
             }
         }
     } catch (e: Exception) {
         e.printStackTrace()
-        logDebug(context"verifyOfflineFiles", "Gagal memverifikasi offline files: ${e.message}")
+        log.e("verifyOfflineFiles", "Gagal memverifikasi offline files: ${e.message}")
+        logDebug(context, "Gagal memverifikasi offline files: ${e.message}")
     }
 }
 
