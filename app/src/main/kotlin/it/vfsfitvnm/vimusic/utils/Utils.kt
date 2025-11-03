@@ -327,13 +327,21 @@ fun deleteOfflineSong(context: Context, songId: String) {
 
         fun logDebug(context: Context, message: String) {
     try {
-        val logDir = File("/storage/emulated/0/ViMusic_logs")
-        if (!logDir.exists()) logDir.mkdirs()
+        // Format waktu biar log rapi
+        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            .format(Date())
 
-        val logFile = File(logDir, "ViMusic_debug_utils.txt")
+        // Format pesan log
+        val logMessage = "[$timestamp] [${Thread.currentThread().name}] $message\n"
 
-        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-        logFile.appendText("[$timestamp] $message\n")
+        // File log di storage utama
+        val logFile = File("/storage/emulated/0/ViMusic_debug_log.txt")
+
+        // Pastikan file bisa ditulis
+        if (!logFile.exists()) logFile.createNewFile()
+
+        // Tambahkan log ke file
+        logFile.appendText(logMessage)
     } catch (e: Exception) {
         e.printStackTrace()
     }
