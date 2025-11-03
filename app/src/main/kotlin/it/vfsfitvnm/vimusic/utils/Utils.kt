@@ -325,7 +325,6 @@ fun deleteOfflineSong(context: Context, songId: String) {
     }
 }
 
-
         fun logDebug(context: Context, message: String) {
     try {
         val logDir = File("/storage/emulated/0/ViMusic_logs")
@@ -339,4 +338,3 @@ fun deleteOfflineSong(context: Context, songId: String) {
         e.printStackTrace()
     }
         }
-}
