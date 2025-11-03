@@ -22,6 +22,7 @@ import it.vfsfitvnm.vimusic.preferences.AppearancePreferences
 import it.vfsfitvnm.vimusic.service.LOCAL_KEY_PREFIX
 import it.vfsfitvnm.vimusic.service.isLocal
 import it.vfsfitvnm.core.ui.utils.SongBundleAccessor
+import it.vfsfitvnm.vimusic.utils.logDebug
 import it.vfsfitvnm.providers.innertube.Innertube
 import it.vfsfitvnm.providers.innertube.models.bodies.ContinuationBody
 import it.vfsfitvnm.providers.innertube.requests.playlistPage
@@ -323,17 +324,3 @@ fun deleteOfflineSong(context: Context, songId: String) {
         e.printStackTrace()
     }
 }
-
-        private fun logDebug(context: Context, message: String) {
-    try {
-        val logDir = File("/storage/emulated/0/ViMusic_logs")
-        if (!logDir.exists()) logDir.mkdirs()
-
-        val logFile = File(logDir, "ViMusic_debug_log.txt")
-
-        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-        logFile.appendText("[$timestamp] $message\n")
-    } catch (e: Exception) {
-        e.printStackTrace()
-    }
-        }
