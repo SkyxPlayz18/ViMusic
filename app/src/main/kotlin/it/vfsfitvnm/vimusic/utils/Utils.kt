@@ -322,6 +322,7 @@ fun deleteOfflineSong(context: Context, songId: String) {
 
     } catch (e: Exception) {
         e.printStackTrace()
+    }
 
 
         fun logDebug(context: Context, message: String) {
