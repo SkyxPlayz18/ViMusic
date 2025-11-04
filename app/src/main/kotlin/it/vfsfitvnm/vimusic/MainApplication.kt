@@ -529,6 +529,13 @@ class MainApplication : Application(), SingletonImageLoader.Factory, Configurati
         verifyOfflineFiles(this)
     }
 
+    override fun onTerminate() {
+    super.onTerminate()
+    try {
+        (PlayerService.cacheInstance as? SimpleCache)?.release()
+    } catch (_: Exception) {}
+    }
+
     override fun newImageLoader(context: PlatformContext) = ImageLoader.Builder(this)
         .crossfade(true)
         .memoryCache {
