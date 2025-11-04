@@ -244,9 +244,13 @@ fun copyCachedFileToPermanentStorage(
     return try {
         logDebug(context, "🚀 Mulai salin file cache: key=$cacheKey")
 
-        val srcFile = File(cacheDir, cacheKey)
-        if (!srcFile.exists()) {
-            logDebug(context, "❌ File cache tidak ditemukan: ${srcFile.path}")
+        // Cari file cache dengan nama mengandung sebagian dari cacheKey
+        val srcFile = cacheDir.walkTopDown().firstOrNull { file ->
+            file.isFile && file.name.contains(cacheKey.take(8), ignoreCase = true)
+        }
+
+        if (srcFile == null) {
+            logDebug(context, "❌ File cache tidak ditemukan di ${cacheDir.path}")
             return null
         }
 
