@@ -168,6 +168,19 @@ class PrecacheService : DownloadService(
     @OptIn(FlowPreview::class)
 override fun getDownloadManager(): DownloadManager {
     logDebug(this, "getDownloadManager() dipanggil")
+    
+    val binderCache = binder?.cache
+if (binderCache == null) {
+    logDebug(this, "⚠️ Binder PlayerService masih null, skip sementara")
+    toast(getString(R.string.error_pre_cache))
+    return DownloadManager(
+        this,
+        PlayerService.createDatabaseProvider(this),
+        PlayerService.createCache(this),
+        PlayerService.createYouTubeDataSourceResolverFactory(this, PlayerService.createCache(this), null),
+        executor
+    )
+}
 
     runCatching {
         if (bound) {
