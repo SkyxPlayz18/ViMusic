@@ -132,16 +132,6 @@ class PrecacheService : DownloadService(
         }
     }
 
-    override fun onDestroy() {
-    super.onDestroy()
-    try {
-        (PlayerService.cacheInstance as? SimpleCache)?.release()
-        logDebug(this, "🧹 Cache dilepas saat service destroy")
-    } catch (e: Exception) {
-        logDebug(this, "⚠️ Error saat release cache: ${e.stackTraceToString()}")
-    }
-    }
-
     inner class NotificationActionReceiver : ActionReceiver("it.vfsfitvnm.vimusic.precache") {
         val cancel by action { context, _ ->
             runCatching {
@@ -336,14 +326,22 @@ override fun getDownloadManager(): DownloadManager {
         .build()
 
     override fun onDestroy() {
-        super.onDestroy()
+    super.onDestroy()
 
-        runCatching {
-            if (bound) unbindService(serviceConnection)
-        }
+    runCatching {
+        if (bound) unbindService(serviceConnection)
+    }
 
-        unregisterReceiver(notificationActionReceiver)
-        mutableDownloadState.update { false }
+    unregisterReceiver(notificationActionReceiver)
+    mutableDownloadState.update { false }
+
+    // 🧹 Tambahan dari gua — pastiin cache dilepas biar gak ke-lock
+    try {
+        (PlayerService.cacheInstance as? SimpleCache)?.release()
+        logDebug(this, "🧹 Cache dilepas saat service destroy")
+    } catch (e: Exception) {
+        logDebug(this, "⚠️ Error saat release cache: ${e.stackTraceToString()}")
+    }
     }
     
     companion object {
