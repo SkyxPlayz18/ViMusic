@@ -265,15 +265,15 @@ override fun getDownloadManager(): DownloadManager {
                 )
 
                 if (copied != null) {
-    CoroutineScope(Dispatchers.IO).launch {
-        val song = Database.instance.getSongById(id)
-        song?.let {
-            val updated = it.copy(isCached = true, isDownloaded = true)
-            Database.instance.upsert(updated)
-            logDebug(this@PrecacheService, "🗂️ DB updated: ${it.title} ditandai offline")
-        }
-    }
-                }
+                    logDebug(this@PrecacheService, "📁 Lagu $id disalin ke: ${copied.path}")
+
+                    try {
+                        val song = Database.instance.getSongById(id)
+                        song?.let {
+                            val updated = it.copy(isCached = true)
+                            Database.instance.upsert(updated)
+                            logDebug(this@PrecacheService, "🗂️ DB updated: ${it.title} ditandai offline")
+                        }
 
                         // 🔹 Broadcast biar UI refresh tab Offline
                         val intent = Intent("it.vfsfitvnm.vimusic.DOWNLOAD_COMPLETED")
