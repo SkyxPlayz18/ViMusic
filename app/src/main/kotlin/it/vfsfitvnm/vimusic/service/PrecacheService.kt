@@ -21,7 +21,7 @@ import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
 import androidx.media3.exoplayer.scheduler.Requirements
 import androidx.media3.exoplayer.workmanager.WorkManagerScheduler
-import androidx.media3.exoplayer.upstream.cache.SimpleCache
+import androidx.media3.datasource.cache.SimpleCache
 import it.vfsfitvnm.vimusic.Database
 import it.vfsfitvnm.vimusic.R
 import it.vfsfitvnm.vimusic.transaction
@@ -237,10 +237,10 @@ override fun getDownloadManager(): DownloadManager {
 
                     coroutineScope.launch {
                         try {
-                            val cacheInstance = PlayerService.cacheInstance ?: PlayerService.createCache(applicationContext)
+                            val cacheInstance = PlayerService.createCache(applicationContext)
                             val spans = cacheInstance.getCachedSpans(id)
                             if (spans.isNotEmpty()) {
-                                val cacheDir = (PlayerService.createCache(applicationContext) as? SimpleCache)?.cacheDir
+val cacheDir = (cacheInstance as? SimpleCache)?.cacheDir
     ?: File(applicationContext.cacheDir, "exoplayer")
                                 try {
     val copied = copyCachedFileToPermanentStorage(
