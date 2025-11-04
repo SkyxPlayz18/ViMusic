@@ -236,27 +236,15 @@ override fun getDownloadManager(): DownloadManager {
 
                 if (download.state == Download.STATE_COMPLETED) {
     logDebug(this@PrecacheService, "✅ Download selesai untuk $id")
-    Database.instance.updateIsCached(id, true)
 
-    coroutineScope.launch {
+    CoroutineScope(Dispatchers.IO).launch {
         try {
-            // 🔹 Buat / ambil instance cache-nya
-            val cacheInstance = PlayerService.createCache(applicationContext)
+            val cacheInstance = PlayerService.cacheInstance ?: PlayerService.createCache(applicationContext)
             val spans = cacheInstance.getCachedSpans(id)
 
             if (spans.isNotEmpty()) {
-                // 🔹 Ambil folder cache internal exo player
-                val cacheDir = try {
-                    val field = cacheInstance.javaClass.getDeclaredField("cacheDir")
-                    field.isAccessible = true
-                    field.get(cacheInstance) as? File
-                } catch (e: Exception) {
-                    null
-                } ?: File(applicationContext.cacheDir, "exoplayer")
+                val cacheDir = File(applicationContext.cacheDir, "exoplayer")
 
-                logDebug(this@PrecacheService, "🗂️ cacheDir terdeteksi: ${cacheDir.path}")
-
-                // 🔹 Salin file dari cache ke folder offline user
                 val copied = copyCachedFileToPermanentStorage(
                     context = this@PrecacheService,
                     cacheDir = cacheDir,
@@ -266,32 +254,35 @@ override fun getDownloadManager(): DownloadManager {
                 if (copied != null) {
                     logDebug(this@PrecacheService, "📁 Lagu $id disalin ke: ${copied.path}")
 
-                    try {
+                    withContext(Dispatchers.IO) {
                         val song = Database.instance.getSongById(id)
                         song?.let {
-                            val updated = it.copy(isCached = true)
+                            val updated = it.copy(isCached = true, isDownloaded = true)
                             Database.instance.upsert(updated)
                             logDebug(this@PrecacheService, "🗂️ DB updated: ${it.title} ditandai offline")
                         }
+                    }
 
-                        // 🔹 Broadcast biar UI refresh tab Offline
+                    // Broadcast ke UI
+                    try {
                         val intent = Intent("it.vfsfitvnm.vimusic.DOWNLOAD_COMPLETED")
                         intent.putExtra("songId", id)
                         sendBroadcast(intent)
                         logDebug(this@PrecacheService, "📢 Broadcast refresh dikirim untuk $id")
-
                     } catch (e: Exception) {
-                        logDebug(this@PrecacheService, "DB error: ${e.stackTraceToString()}")
+                        logDebug(this@PrecacheService, "⚠️ Gagal kirim broadcast: ${e.stackTraceToString()}")
                     }
                 } else {
-                    logDebug(this@PrecacheService, "⚠️ Gagal salin file cache untuk $id")
+                    logDebug(this@PrecacheService, "⚠️ File hasil copy NULL (kemungkinan cache belum lengkap)")
                 }
+            } else {
+                logDebug(this@PrecacheService, "⚠️ Cache kosong untuk $id, belum bisa disalin")
             }
         } catch (e: Exception) {
-            logDebug(this@PrecacheService, "❌ ERROR umum di coroutine: ${e.stackTraceToString()}")
+            logDebug(this@PrecacheService, "❌ ERROR di coroutine onDownloadChanged: ${e.stackTraceToString()}")
         }
     }
-                }
+}
 
                 if (download.state == Download.STATE_FAILED) {
                     logDebug(this@PrecacheService, "❌ Download gagal: ${finalException?.stackTraceToString()}")
