@@ -192,6 +192,21 @@ class PrecacheService : DownloadService(
                         finalException: Exception?
                     ) = downloadQueue.trySend(downloadManager).let { }
 
+                    if (download.state == Download.STATE_COMPLETED) {
+    val id = download.request.id
+
+    try {
+        Database.instance.updateIsCached(id, true)
+    } catch (e: Exception)
+
+    // Kirim broadcast biar UI refresh
+    try {
+        val intent = Intent("it.vfsfitvnm.vimusic.DOWNLOAD_COMPLETED")
+        intent.putExtra("songId", id)
+        sendBroadcast(intent)
+    } catch (e: Exception) 
+                    }
+
                     override fun onDownloadRemoved(
                         downloadManager: DownloadManager,
                         download: Download
