@@ -26,6 +26,7 @@ import it.vfsfitvnm.vimusic.utils.ActionReceiver
 import it.vfsfitvnm.vimusic.utils.download
 import it.vfsfitvnm.vimusic.utils.intent
 import it.vfsfitvnm.vimusic.utils.toast
+import it.vfsfitvnm.vimusic.utils.logDebug
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -194,17 +195,23 @@ class PrecacheService : DownloadService(
 
                     if (download.state == Download.STATE_COMPLETED) {
     val id = download.request.id
+    logDebug(this@PrecacheService, "✅ Download selesai untuk $id")
 
     try {
         Database.instance.updateIsCached(id, true)
-    } catch (e: Exception)
+        logDebug(this@PrecacheService, "Database updated: $id ditandai offline")
+    } catch (e: Exception) {
+        logDebug(this@PrecacheService, "Gagal update DB untuk $id: ${e.message}")
+    }
 
     // Kirim broadcast biar UI refresh
     try {
         val intent = Intent("it.vfsfitvnm.vimusic.DOWNLOAD_COMPLETED")
         intent.putExtra("songId", id)
         sendBroadcast(intent)
-    } catch (e: Exception) 
+    } catch (e: Exception) {
+        logDebug(this@PrecacheService, "Gagal kirim broadcast: ${e.message}")
+    }
                     }
 
                     override fun onDownloadRemoved(
