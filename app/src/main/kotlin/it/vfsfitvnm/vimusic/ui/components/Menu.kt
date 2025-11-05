@@ -29,11 +29,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.times
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.ui.res.painterResource
-import androidx.compose.foundation.layout.fillMaxWidth
 import it.vfsfitvnm.vimusic.LocalPlayerAwareWindowInsets
 import it.vfsfitvnm.vimusic.ui.modifiers.pressable
 
@@ -45,6 +40,7 @@ class MenuState {
         private set
 
     var content by mutableStateOf<@Composable () -> Unit>({})
+        private set
 
     fun display(content: @Composable () -> Unit) {
         this.content = content
@@ -115,25 +111,5 @@ fun BottomSheetMenu(
                 state.content()
             }
         }
-    }
-}
-
-fun MenuState.addCustomAction(
-    title: String,
-    icon: Int? = null,
-    onClick: () -> Unit
-) {
-    // ubah konten menu jadi gabungan lama + item baru
-    val oldContent = content
-    content = {
-        oldContent()
-        DropdownMenuItem(
-            text = { Text(title) },
-            onClick = {
-                onClick()
-                hide()
-            },
-            leadingIcon = icon?.let { { Icon(painterResource(it), contentDescription = null) } }
-        )
     }
 }
