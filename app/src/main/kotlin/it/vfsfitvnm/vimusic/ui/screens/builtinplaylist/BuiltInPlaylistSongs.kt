@@ -22,8 +22,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.ui.platform.LocalContext
 import it.vfsfitvnm.vimusic.Database
 import it.vfsfitvnm.vimusic.LocalPlayerAwareWindowInsets
 import it.vfsfitvnm.vimusic.LocalPlayerServiceBinder
@@ -52,25 +50,13 @@ import it.vfsfitvnm.core.data.enums.SortOrder
 import it.vfsfitvnm.core.ui.Dimensions
 import it.vfsfitvnm.core.ui.LocalAppearance
 import it.vfsfitvnm.core.ui.utils.enumSaver
-import it.vfsfitvnm.vimusic.ui.components.addCustomAction
-import it.vfsfitvnm.vimusic.utils.deleteOfflineSong
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.cancellable
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.collect
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.app.AlertDialog
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalCoroutinesApi::class)
 @Composable
@@ -87,29 +73,6 @@ fun BuiltInPlaylistSongs(
     var sortBy by rememberSaveable(stateSaver = enumSaver()) { mutableStateOf(SongSortBy.DateAdded) }
     var sortOrder by rememberSaveable(stateSaver = enumSaver()) { mutableStateOf(SortOrder.Descending) }
 
-    val context = LocalContext.current
-
-DisposableEffect(Unit) {
-    val filter = IntentFilter("it.vfsfitvnm.vimusic.DOWNLOAD_COMPLETED")
-    val receiver = object : BroadcastReceiver() {
-        override fun onReceive(ctx: Context?, intent: Intent?) {
-            if (builtInPlaylist == BuiltInPlaylist.Offline) {
-                // Reload ulang daftar offline
-                songs = persistentListOf()
-                binder?.let {
-                    CoroutineScope(Dispatchers.IO).launch {
-                        Database.instance.getDownloadedSongs().collect { list ->
-                            songs = list.toImmutableList()
-                        }
-                    }
-                }
-            }
-        }
-    }
-    context.registerReceiver(receiver, filter)
-    onDispose { context.unregisterReceiver(receiver) }
-}
-
     LaunchedEffect(binder, sortBy, sortOrder) {
         when (builtInPlaylist) {
             BuiltInPlaylist.Favorites -> Database.instance.favorites(
@@ -118,9 +81,14 @@ DisposableEffect(Unit) {
             )
 
             BuiltInPlaylist.Offline ->
-    Database.instance
-        .getDownloadedSongs()
-        .map { it.toImmutableList() }
+                Database.instance
+                    .songsWithContentLength(
+                        sortBy = sortBy,
+                        sortOrder = sortOrder
+                    )
+                    .map { songs ->
+                        songs.filter { binder?.isCached(it) ?: false }.map { it.song }
+                    }
 
             BuiltInPlaylist.Top -> combine(
                 flow = topListPeriodProperty.stateFlow,
@@ -227,51 +195,22 @@ DisposableEffect(Unit) {
                     modifier = Modifier
                         .combinedClickable(
                             onLongClick = {
-    menuState.display {
-        when (builtInPlaylist) {
-            BuiltInPlaylist.Favorites -> NonQueuedMediaItemMenu(
-                mediaItem = song.asMediaItem,
-                onDismiss = menuState::hide
-            )
+                                menuState.display {
+                                    when (builtInPlaylist) {
+                                        BuiltInPlaylist.Offline -> InHistoryMediaItemMenu(
+                                            song = song,
+                                            onDismiss = menuState::hide
+                                        )
 
-            BuiltInPlaylist.Top -> NonQueuedMediaItemMenu(
-                mediaItem = song.asMediaItem,
-                onDismiss = menuState::hide
-            )
-
-            BuiltInPlaylist.History -> InHistoryMediaItemMenu(
-                song = song,
-                onDismiss = menuState::hide
-            )
-
-            BuiltInPlaylist.Offline -> {
-                val context = LocalContext.current
-
-                InHistoryMediaItemMenu(
-                    song = song,
-                    onDismiss = menuState::hide
-                )
-
-                // 🔹 Tambahan menu hapus offline
-                menuState.addCustomAction(
-    title = "Delete From Offline",
-    icon = R.drawable.delete,
-    onClick = {
-        AlertDialog.Builder(context)
-            .setTitle("Delete Offline Song?")
-            .setMessage("This Song Will Be Delete From Album Offline.")
-            .setPositiveButton("Delete", { dialogInterface, which ->
-                deleteOfflineSong(context, song.id)
-            })
-            .setNegativeButton("Cancel", null)
-            .show()
-        menuState.hide()
-    }
-)
-            }
-        }
-    }
-},
+                                        BuiltInPlaylist.Favorites,
+                                        BuiltInPlaylist.Top,
+                                        BuiltInPlaylist.History -> NonQueuedMediaItemMenu(
+                                            mediaItem = song.asMediaItem,
+                                            onDismiss = menuState::hide
+                                        )
+                                    }
+                                }
+                            },
                             onClick = {
                                 binder?.stopRadio()
                                 binder?.player?.forcePlayAtIndex(
