@@ -64,7 +64,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
-import androidx.media3.datasource.cache.SimpleCache
 import androidx.work.Configuration
 import it.vfsfitvnm.vimusic.preferences.AppearancePreferences
 import it.vfsfitvnm.vimusic.preferences.DataPreferences
@@ -96,7 +95,6 @@ import it.vfsfitvnm.vimusic.utils.maybeExitPip
 import it.vfsfitvnm.vimusic.utils.setDefaultPalette
 import it.vfsfitvnm.vimusic.utils.shouldBePlaying
 import it.vfsfitvnm.vimusic.utils.toast
-import it.vfsfitvnm.vimusic.utils.verifyOfflineFiles
 import it.vfsfitvnm.compose.persist.LocalPersistMap
 import it.vfsfitvnm.compose.persist.PersistMap
 import it.vfsfitvnm.compose.preferences.PreferencesHolder
@@ -527,14 +525,6 @@ class MainApplication : Application(), SingletonImageLoader.Factory, Configurati
         Dependencies.init(this)
         MonetCompat.enablePaletteCompat()
         ServiceNotifications.createAll()
-        verifyOfflineFiles(this)
-    }
-
-    override fun onTerminate() {
-    super.onTerminate()
-    try {
-        (PlayerService.cacheInstance as? SimpleCache)?.release()
-    } catch (_: Exception) {}
     }
 
     override fun newImageLoader(context: PlatformContext) = ImageLoader.Builder(this)
