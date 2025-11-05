@@ -6,9 +6,6 @@ import android.content.ContentUris
 import android.net.Uri
 import android.provider.MediaStore
 import android.text.format.DateUtils
-import android.util.Log
-import android.content.Intent
-import android.content.Context
 import androidx.annotation.OptIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
@@ -22,7 +19,6 @@ import it.vfsfitvnm.vimusic.preferences.AppearancePreferences
 import it.vfsfitvnm.vimusic.service.LOCAL_KEY_PREFIX
 import it.vfsfitvnm.vimusic.service.isLocal
 import it.vfsfitvnm.core.ui.utils.SongBundleAccessor
-import it.vfsfitvnm.vimusic.utils.logDebug
 import it.vfsfitvnm.providers.innertube.Innertube
 import it.vfsfitvnm.providers.innertube.models.bodies.ContinuationBody
 import it.vfsfitvnm.providers.innertube.requests.playlistPage
@@ -32,20 +28,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlin.time.Duration
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import it.vfsfitvnm.vimusic.Database
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.launch
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.*
-
-
 
 val Innertube.SongItem.asMediaItem: MediaItem
     get() = MediaItem.Builder()
@@ -234,97 +216,4 @@ inline fun <reified T : Throwable> Throwable.findCause(): T? {
     }
 
     return null
-}
-
-fun copyCachedFileToPermanentStorage(
-    context: Context,
-    cacheDir: File,
-    cacheKey: String
-): File? {
-    return try {
-        logDebug(context, "🚀 Mulai salin file cache: key=$cacheKey")
-
-        // Cari file cache dengan nama mengandung sebagian dari cacheKey
-        val srcFile = cacheDir.walkTopDown().firstOrNull { file ->
-            file.isFile && file.name.contains(cacheKey.take(8), ignoreCase = true)
-        }
-
-        if (srcFile == null) {
-            logDebug(context, "❌ File cache tidak ditemukan di ${cacheDir.path}")
-            return null
-        }
-
-        val dstDir = context.getOfflineSongDir()
-        if (!dstDir.exists()) {
-            dstDir.mkdirs()
-            logDebug(context, "📂 Folder offline dibuat: ${dstDir.path}")
-        }
-
-        val dstFile = File(dstDir, "$cacheKey.mp3")
-        srcFile.copyTo(dstFile, overwrite = true)
-
-        logDebug(context, "✅ File disalin ke: ${dstFile.path}")
-        dstFile
-    } catch (e: Exception) {
-        logDebug(context, "💥 ERROR di copyCachedFileToPermanentStorage: ${e.stackTraceToString()}")
-        null
-    }
-}
-
-fun verifyOfflineFiles(context: Context) {
-    try {
-        val offlineDir = context.getOfflineSongDir()
-        val db = Database.instance ?: return
-
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val songs = db.getDownloadedSongs().firstOrNull() ?: return@launch
-
-                songs.forEach { song ->
-                    val file = File(offlineDir, "${song.id}.mp3")
-                    if (!file.exists()) {
-                        val updated = song.copy(isDownloaded = false)
-                        db.upsert(updated)
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                Log.e("verifyOfflineFiles", "Gagal memverifikasi offline files (dalam coroutine): ${e.message}")
-                logDebug(context, "Gagal memverifikasi Offline Files (Dalam Coroutine): ${e.message}")
-            }
-        }
-    } catch (e: Exception) {
-        e.printStackTrace()
-        Log.e("verifyOfflineFiles", "Gagal memverifikasi offline files: ${e.message}")
-        logDebug(context, "Gagal memverifikasi offline files: ${e.message}")
-    }
-}
-
-fun deleteOfflineSong(context: Context, songId: String) {
-    try {
-        val offlineDir = context.getOfflineSongDir()
-        val file = File(offlineDir, "$songId.mp3")
-        if (file.exists()) {
-            file.delete()
-            Log.d("OfflineDelete", "🗑️ File ${file.name} berhasil dihapus")
-        }
-
-        // Update database
-        CoroutineScope(Dispatchers.IO).launch {
-            val db = Database.instance
-            val song = db.getSongById(songId)
-            song?.let {
-                val updated = it.copy(isDownloaded = false)
-                db.upsert(updated)
-            }
-        }
-
-        // Kirim broadcast biar UI refresh
-        val intent = Intent("it.vfsfitvnm.vimusic.DOWNLOAD_COMPLETED")
-        intent.putExtra("songId", songId)
-        context.sendBroadcast(intent)
-
-    } catch (e: Exception) {
-        e.printStackTrace()
-    }
 }
