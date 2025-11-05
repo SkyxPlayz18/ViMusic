@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.ServiceConnection
+import android.content.Intent
 import android.os.IBinder
 import androidx.annotation.OptIn
 import androidx.core.app.NotificationCompat
@@ -188,40 +189,37 @@ class PrecacheService : DownloadService(
                         mutableDownloadState.update { false }
 
                     override fun onDownloadChanged(
-                        downloadManager: DownloadManager,
-                        download: Download,
-                        finalException: Exception?
-                    ) = downloadQueue.trySend(downloadManager).let { }
-
-                    if (download.state == Download.STATE_COMPLETED) {
+    downloadManager: DownloadManager,
+    download: Download,
+    finalException: Exception?
+) {
     val id = download.request.id
-    logDebug(this@PrecacheService, "✅ Download selesai untuk $id")
+    logDebug(this@PrecacheService, "onDownloadChanged: $id, state=${download.state}")
 
-    try {
-        Database.instance.updateIsCached(id, true)
-        logDebug(this@PrecacheService, "Database updated: $id ditandai offline")
-    } catch (e: Exception) {
-        logDebug(this@PrecacheService, "Gagal update DB untuk $id: ${e.message}")
-    }
+    if (download.state == Download.STATE_COMPLETED) {
+        val id = download.request.id
+        logDebug(this@PrecacheService, "✅ Download selesai untuk $id")
 
-    // Kirim broadcast biar UI refresh
-    try {
-        val intent = Intent("it.vfsfitvnm.vimusic.DOWNLOAD_COMPLETED")
-        intent.putExtra("songId", id)
-        sendBroadcast(intent)
-    } catch (e: Exception) {
-        logDebug(this@PrecacheService, "Gagal kirim broadcast: ${e.message}")
-    }
-                    }
+        try {
+            Database.instance.updateIsCached(id, true)
+            logDebug(this@PrecacheService, "Database updated: $id ditandai offline")
+        } catch (e: Exception) {
+            logDebug(this@PrecacheService, "Gagal update DB untuk $id: ${e.message}")
+        }
 
-                    override fun onDownloadRemoved(
-                        downloadManager: DownloadManager,
-                        download: Download
-                    ) = downloadQueue.trySend(downloadManager).let { }
-                }
-            )
+        try {
+            val intent = Intent("it.vfsfitvnm.vimusic.DOWNLOAD_COMPLETED")
+            intent.putExtra("songId", id)
+            sendBroadcast(intent)
+        } catch (e: Exception) {
+            logDebug(this@PrecacheService, "Gagal kirim broadcast: ${e.message}")
         }
     }
+
+    if (download.state == Download.STATE_FAILED) {
+        logDebug(this@PrecacheService, "❌ Download gagal: ${finalException?.stackTraceToString()}")
+    }
+                    }
 
     override fun getScheduler() = WorkManagerScheduler(this, DOWNLOAD_WORK_NAME)
 
