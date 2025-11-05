@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.ServiceConnection
-import android.content.Intent
 import android.os.IBinder
 import androidx.annotation.OptIn
 import androidx.core.app.NotificationCompat
@@ -13,7 +12,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.CacheSpan
 import androidx.media3.datasource.cache.ContentMetadataMutations
-import androidx.media3.datasource.DataSpec
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadNotificationHelper
@@ -21,8 +19,6 @@ import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
 import androidx.media3.exoplayer.scheduler.Requirements
 import androidx.media3.exoplayer.workmanager.WorkManagerScheduler
-import androidx.media3.datasource.cache.SimpleCache
-import androidx.media3.exoplayer.scheduler.Scheduler
 import it.vfsfitvnm.vimusic.Database
 import it.vfsfitvnm.vimusic.R
 import it.vfsfitvnm.vimusic.transaction
@@ -30,9 +26,6 @@ import it.vfsfitvnm.vimusic.utils.ActionReceiver
 import it.vfsfitvnm.vimusic.utils.download
 import it.vfsfitvnm.vimusic.utils.intent
 import it.vfsfitvnm.vimusic.utils.toast
-import it.vfsfitvnm.vimusic.utils.copyCachedFileToPermanentStorage
-import it.vfsfitvnm.vimusic.models.Playlist
-import it.vfsfitvnm.vimusic.models.SongPlaylistMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -51,33 +44,12 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import java.io.File
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import kotlin.time.Duration.Companion.milliseconds
 import androidx.core.net.toUri
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.UUID
-
-
-private fun logDebug(context: Context, message: String) {
-    try {
-        val logDir = File("/storage/emulated/0/ViMusic_logs")
-        if (!logDir.exists()) logDir.mkdirs()
-
-        val logFile = File(logDir, "ViMusic_log.txt")
-
-        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-        logFile.appendText("[$timestamp] $message\n")
-    } catch (e: Exception) {
-        e.printStackTrace()
-    }
-}
 
 private val executor = Executors.newCachedThreadPool()
 private val coroutineScope = CoroutineScope(
@@ -110,7 +82,7 @@ class PrecacheService : DownloadService(
             /* channelId = */ ServiceNotifications.download.id
         )
     }
-    
+
     private val notificationActionReceiver = NotificationActionReceiver()
 
     private val waiters = mutableListOf<() -> Unit>()
@@ -165,151 +137,69 @@ class PrecacheService : DownloadService(
     }
 
     @kotlin.OptIn(FlowPreview::class)
-    @OptIn(FlowPreview::class)
-override fun getDownloadManager(): DownloadManager {
-    logDebug(this, "getDownloadManager() dipanggil")
-    
-    val binderCache = binder?.cache
-if (binderCache == null) {
-    logDebug(this, "⚠️ Binder PlayerService masih null, skip sementara")
-    toast(getString(R.string.error_pre_cache))
-    return DownloadManager(
-        this,
-        PlayerService.createDatabaseProvider(this),
-        PlayerService.createCache(this),
-        PlayerService.createYouTubeDataSourceResolverFactory(this, PlayerService.createCache(this), null),
-        executor
-    )
-}
-
-    runCatching {
-        if (bound) {
-            logDebug(this, "Service sebelumnya bound, unbind dulu")
-            unbindService(serviceConnection)
-        }
-        bindService(intent<PlayerService>(), serviceConnection, BIND_AUTO_CREATE)
-        logDebug(this, "Berhasil bind ke PlayerService")
-    }.exceptionOrNull()?.let {
-        logDebug(this, "Gagal bind service: ${it.stackTraceToString()}")
-        toast(getString(R.string.error_pre_cache))
-    }
-
-    // 🔹 Tunggu cache siap
-    val cache = BlockingDeferredCache {
-        suspendCoroutine { cont ->
-            waiters += { cont.resume(Unit) }
-        }
-        logDebug(this@PrecacheService, "Menunggu binder PlayerService...")
-        binder?.cache ?: run {
-            logDebug(this@PrecacheService, "PlayerService binder NULL saat ambil cache")
+    override fun getDownloadManager(): DownloadManager {
+        runCatching {
+            if (bound) unbindService(serviceConnection)
+            bindService(intent<PlayerService>(), serviceConnection, BIND_AUTO_CREATE)
+        }.exceptionOrNull()?.let {
+            it.printStackTrace()
             toast(getString(R.string.error_pre_cache))
-            error("PlayerService failed to start, binder null")
+        }
+
+        val cache = BlockingDeferredCache {
+            suspendCoroutine {
+                waiters += { it.resume(Unit) }
+            }
+            binder?.cache ?: run {
+                toast(getString(R.string.error_pre_cache))
+                error("PlayerService failed to start, crashing...")
+            }
+        }
+
+        progressUpdaterJob?.cancel()
+        progressUpdaterJob = coroutineScope.launch {
+            downloadQueue
+                .receiveAsFlow()
+                .debounce(100.milliseconds)
+                .collect { downloadManager ->
+                    mutableDownloadState.update { !downloadManager.isIdle }
+                }
+        }
+
+        return DownloadManager(
+            /* context = */ this,
+            /* databaseProvider = */ PlayerService.createDatabaseProvider(this),
+            /* cache = */ cache,
+            /* upstreamFactory = */ PlayerService.createYouTubeDataSourceResolverFactory(
+                context = this,
+                cache = cache,
+                chunkLength = null
+            ),
+            /* executor = */ executor
+        ).apply {
+            maxParallelDownloads = 3
+            minRetryCount = 1
+            requirements = Requirements(Requirements.NETWORK)
+
+            addListener(
+                object : DownloadManager.Listener {
+                    override fun onIdle(downloadManager: DownloadManager) =
+                        mutableDownloadState.update { false }
+
+                    override fun onDownloadChanged(
+                        downloadManager: DownloadManager,
+                        download: Download,
+                        finalException: Exception?
+                    ) = downloadQueue.trySend(downloadManager).let { }
+
+                    override fun onDownloadRemoved(
+                        downloadManager: DownloadManager,
+                        download: Download
+                    ) = downloadQueue.trySend(downloadManager).let { }
+                }
+            )
         }
     }
-
-    // 🔹 Update progress download
-    progressUpdaterJob?.cancel()
-    progressUpdaterJob = coroutineScope.launch {
-        logDebug(this@PrecacheService, "ProgressUpdaterJob mulai jalan")
-        downloadQueue
-            .receiveAsFlow()
-            .debounce(100.milliseconds)
-            .collect { downloadManager ->
-                mutableDownloadState.update { !downloadManager.isIdle }
-            }
-    }
-
-    logDebug(this, "DownloadManager berhasil dibuat")
-
-    return DownloadManager(
-        this,
-        PlayerService.createDatabaseProvider(this),
-        cache,
-        PlayerService.createYouTubeDataSourceResolverFactory(this, cache, null),
-        executor
-    ).apply {
-        maxParallelDownloads = 3
-        minRetryCount = 1
-        requirements = Requirements(Requirements.NETWORK)
-
-        addListener(object : DownloadManager.Listener {
-
-            override fun onIdle(downloadManager: DownloadManager) {
-                logDebug(this@PrecacheService, "DownloadManager idle")
-                mutableDownloadState.update { false }
-            }
-
-            override fun onDownloadChanged(
-                downloadManager: DownloadManager,
-                download: Download,
-                finalException: Exception?
-            ) {
-                val id = download.request.id
-                logDebug(this@PrecacheService, "onDownloadChanged: $id, state=${download.state}")
-
-                if (download.state == Download.STATE_COMPLETED) {
-    logDebug(this@PrecacheService, "✅ Download selesai untuk $id")
-
-    CoroutineScope(Dispatchers.IO).launch {
-        try {
-            val cacheInstance = PlayerService.cacheInstance ?: PlayerService.createCache(applicationContext)
-            val spans = cacheInstance.getCachedSpans(id)
-
-            if (spans.isNotEmpty()) {
-                val cacheDir = File(applicationContext.cacheDir, "exoplayer")
-
-                val copied = copyCachedFileToPermanentStorage(
-                    context = this@PrecacheService,
-                    cacheDir = cacheDir,
-                    cacheKey = id
-                )
-
-                if (copied != null) {
-                    logDebug(this@PrecacheService, "📁 Lagu $id disalin ke: ${copied.path}")
-
-                    withContext(Dispatchers.IO) {
-                        val song = Database.instance.getSongById(id)
-                        song?.let {
-                            val updated = it.copy(isCached = true, isDownloaded = true)
-                            Database.instance.upsert(updated)
-                            logDebug(this@PrecacheService, "🗂️ DB updated: ${it.title} ditandai offline")
-                        }
-                    }
-
-                    // Broadcast ke UI
-                    try {
-                        val intent = Intent("it.vfsfitvnm.vimusic.DOWNLOAD_COMPLETED")
-                        intent.putExtra("songId", id)
-                        sendBroadcast(intent)
-                        logDebug(this@PrecacheService, "📢 Broadcast refresh dikirim untuk $id")
-                    } catch (e: Exception) {
-                        logDebug(this@PrecacheService, "⚠️ Gagal kirim broadcast: ${e.stackTraceToString()}")
-                    }
-                } else {
-                    logDebug(this@PrecacheService, "⚠️ File hasil copy NULL (kemungkinan cache belum lengkap)")
-                }
-            } else {
-                logDebug(this@PrecacheService, "⚠️ Cache kosong untuk $id, belum bisa disalin")
-            }
-        } catch (e: Exception) {
-            logDebug(this@PrecacheService, "❌ ERROR di coroutine onDownloadChanged: ${e.stackTraceToString()}")
-        }
-    }
-}
-
-                if (download.state == Download.STATE_FAILED) {
-                    logDebug(this@PrecacheService, "❌ Download gagal: ${finalException?.stackTraceToString()}")
-                }
-            }
-
-            override fun onDownloadRemoved(downloadManager: DownloadManager, download: Download) {
-                logDebug(this@PrecacheService, "onDownloadRemoved: ${download.request.id}")
-                downloadQueue.trySend(downloadManager)
-            }
-        })
-    }
-}
-
 
     override fun getScheduler() = WorkManagerScheduler(this, DOWNLOAD_WORK_NAME)
 
@@ -339,119 +229,49 @@ if (binderCache == null) {
         .build()
 
     override fun onDestroy() {
-    super.onDestroy()
+        super.onDestroy()
 
-    runCatching {
-        if (bound) unbindService(serviceConnection)
-    }
-
-    unregisterReceiver(notificationActionReceiver)
-    mutableDownloadState.update { false }
-
-    // 🧹 Tambahan dari gua — pastiin cache dilepas biar gak ke-lock
-    try {
-        (PlayerService.cacheInstance as? SimpleCache)?.release()
-        logDebug(this, "🧹 Cache dilepas saat service destroy")
-    } catch (e: Exception) {
-        logDebug(this, "⚠️ Error saat release cache: ${e.stackTraceToString()}")
-    }
-    }
-    
-    companion object {
-    @SuppressLint("UseKtx")
-fun scheduleCache(context: Context, mediaItem: MediaItem) {
-    if (mediaItem.isLocal) {
-        logDebug(context, "Batal scheduleCache: mediaItem ${mediaItem.mediaId} adalah lokal")
-        return
-    }
-
-    logDebug(context, "Mulai scheduleCache untuk ${mediaItem.mediaId}")
-
-    val fallbackUri = ("https://youtube.com/watch?v=${mediaItem.mediaId}").toUri()
-
-    // 🔹 Coba ambil cache dari PlayerService lewat binder
-    val cache = runCatching {
-        val appContext = context.applicationContext
-        val playerServiceField = appContext
-            .javaClass
-            .classLoader
-            ?.loadClass("it.vfsfitvnm.vimusic.service.PlayerService")
-            ?.getDeclaredField("binder")
-        playerServiceField?.isAccessible = true
-        val binderInstance = playerServiceField?.get(null)
-        binderInstance?.javaClass?.getMethod("getCache")?.invoke(binderInstance) as? Cache
-    }.getOrNull()
-
-    // 🔹 Buat resolverFactory hanya jika cache berhasil diambil
-    val resolverFactory = cache?.let {
         runCatching {
-            PlayerService.createYouTubeDataSourceResolverFactory(
-                context = context,
-                cache = it,
-                chunkLength = null
-            )
-        }.getOrElse { err ->
-            logDebug(context, "Gagal buat resolverFactory: ${err.stackTraceToString()}")
-            null
+            if (bound) unbindService(serviceConnection)
         }
+
+        unregisterReceiver(notificationActionReceiver)
+        mutableDownloadState.update { false }
     }
 
-    val resolvedUri = runCatching {
-        if (resolverFactory != null) {
-            val dataSpec = DataSpec.Builder()
-                .setUri(fallbackUri)
-                .setKey(mediaItem.mediaId)
+    companion object {
+        @SuppressLint("UseKtx")
+        fun scheduleCache(context: Context, mediaItem: MediaItem) {
+            if (mediaItem.isLocal) return
+
+            val downloadRequest = DownloadRequest
+                .Builder(
+                    /* id      = */ mediaItem.mediaId,
+                    /* uri     = */ mediaItem.requestMetadata.mediaUri
+                        ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
+                )
+                .setCustomCacheKey(mediaItem.mediaId)
+                .setData(mediaItem.mediaId.encodeToByteArray())
                 .build()
-            val ds = resolverFactory.createDataSource()
-            try {
-                ds.open(dataSpec)
-                ds.uri ?: fallbackUri
-            } finally {
-                runCatching { ds.close() }
-            }
-        } else fallbackUri
-    }.getOrElse { ex ->
-        logDebug(context, "Resolver gagal saat open: ${ex.stackTraceToString()}")
-        fallbackUri
-    }
 
-    val downloadRequest = DownloadRequest.Builder(
-        mediaItem.mediaId,
-        resolvedUri
-    )
-        .setCustomCacheKey(mediaItem.mediaId)
-        .setData(mediaItem.mediaId.encodeToByteArray())
-        .build()
+            transaction {
+                runCatching {
+                    Database.instance.insert(mediaItem)
+                }.also { if (it.isFailure) return@transaction }
 
-    try {
-        transaction {
-            runCatching {
-                logDebug(context, "InsertPreserve mulai untuk ${mediaItem.mediaId}")
-                Database.instance.insertPreserve(mediaItem)
-                logDebug(context, "InsertPreserve sukses untuk ${mediaItem.mediaId}")
-            }.onFailure {
-                logDebug(context, "InsertPreserve gagal: ${it.stackTraceToString()}")
-                return@transaction
-            }
+                coroutineScope.launch {
+                    context.download<PrecacheService>(downloadRequest).exceptionOrNull()?.let {
+                        if (it is CancellationException) throw it
 
-            coroutineScope.launch {
-                logDebug(context, "Mulai download untuk ${mediaItem.mediaId} -> $resolvedUri")
-                val result = context.download<PrecacheService>(downloadRequest)
-                result.exceptionOrNull()?.let { err ->
-                    logDebug(context, "Download error: ${err.stackTraceToString()}")
-                    context.toast(context.getString(R.string.error_pre_cache))
-                } ?: logDebug(context, "Download berhasil dimulai untuk ${mediaItem.mediaId}")
+                        it.printStackTrace()
+                        context.toast(context.getString(R.string.error_pre_cache))
+                    }
+                }
             }
         }
-    } catch (e: Exception) {
-        logDebug(context, "Exception di scheduleCache: ${e.stackTraceToString()}")
     }
 }
-    }
-}
-// =======================
-//  BlockingDeferredCache
-// =======================
+
 @Suppress("TooManyFunctions")
 @OptIn(UnstableApi::class)
 class BlockingDeferredCache(private val cache: Deferred<Cache>) : Cache {
