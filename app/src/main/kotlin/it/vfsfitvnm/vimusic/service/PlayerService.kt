@@ -1416,32 +1416,14 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
                     .ranged(cachedUri.meta)
             } ?: run {
                 val (url, contentLength) = runBlocking(Dispatchers.IO) {
-    val bodyResult = Innertube.player(PlayerBody(videoId = requestedMediaId))
-    val body = bodyResult?.getOrNull()
-
-    if (body == null) {
-        logDebug(context, "⚠️ API response null untuk videoId=$requestedMediaId")
-        throw Exception("API response was null.")
-    } else {
-        logDebug(context, "✅ API response OK untuk videoId=$requestedMediaId")
-    }
-
-    val format = body.streamingData?.highestQualityFormat
-    if (format == null) {
-        logDebug(context, "❌ Tidak ada format audio valid untuk $requestedMediaId")
-        throw Exception("Could not find a playable audio format in the response.")
-    }
-
-    val finalUrl = format.findUrl(requestedMediaId)
-    if (finalUrl == null) {
-        logDebug(context, "❌ Gagal generate playable URL untuk $requestedMediaId")
-        throw Exception("Failed to generate a playable URL from the selected format.")
-    } else {
-        logDebug(context, "🎯 Dapat playable URL: $finalUrl")
-    }
-
-    Pair(finalUrl, format.contentLength)
-}
+                    val body = Innertube.player(PlayerBody(videoId = requestedMediaId))?.getOrThrow()
+                        ?: throw Exception("API response was null.")
+                    val format = body.streamingData?.highestQualityFormat
+                        ?: throw Exception("Could not find a playable audio format in the response.")
+                    val finalUrl = format.findUrl(requestedMediaId)
+                        ?: throw Exception("Failed to generate a playable URL from the selected format.")
+                    Pair(finalUrl, format.contentLength)
+                }
 
                 val uri = url.toUri()
 
