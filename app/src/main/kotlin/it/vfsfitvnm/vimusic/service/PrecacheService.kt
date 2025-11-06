@@ -48,6 +48,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.firstOrNull
 import java.io.File
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
@@ -277,37 +278,44 @@ class PrecacheService : DownloadService(
     }
 
     companion object {
-        @SuppressLint("UseKtx")
-        fun scheduleCache(context: Context, mediaItem: MediaItem) {
-            if (mediaItem.isLocal) return
+    @SuppressLint("UseKtx")
+    fun scheduleCache(context: Context, mediaItem: MediaItem) {
+        if (mediaItem.isLocal) return
 
-            val downloadRequest = DownloadRequest
-                .Builder(
-                    /* id      = */ mediaItem.mediaId,
-                    /* uri     = */ mediaItem.requestMetadata.mediaUri
-                        ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
-                )
-                .setCustomCacheKey(mediaItem.mediaId)
-                .setData(mediaItem.mediaId.encodeToByteArray())
-                .build()
+        val downloadRequest = DownloadRequest
+            .Builder(
+                /* id      = */ mediaItem.mediaId,
+                /* uri     = */ mediaItem.requestMetadata.mediaUri
+                    ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
+            )
+            .setCustomCacheKey(mediaItem.mediaId)
+            .setData(mediaItem.mediaId.encodeToByteArray())
+            .build()
 
-            transaction {
-                runCatching {
-                    Database.instance.insert(mediaItem)
-                }.also { if (it.isFailure) return@transaction }
-
-                coroutineScope.launch {
-                    context.download<PrecacheService>(downloadRequest).exceptionOrNull()?.let {
-                        if (it is CancellationException) throw it
-
-                        it.printStackTrace()
-                        context.toast(context.getString(R.string.error_pre_cache))
+        transaction {
+            runCatching {
+                // ✅ FIX: Jangan insert lagi kalau song udah ada!
+                // Cuma insert kalau belum ada di database
+                runBlocking {
+                    val existingSong = Database.instance.song(mediaItem.mediaId).firstOrNull()
+                    if (existingSong == null) {
+                        Database.instance.insert(mediaItem)
                     }
+                }
+            }.also { if (it.isFailure) return@transaction }
+
+            coroutineScope.launch {
+                context.download<PrecacheService>(downloadRequest).exceptionOrNull()?.let {
+                    if (it is CancellationException) throw it
+
+                    it.printStackTrace()
+                    context.toast(context.getString(R.string.error_pre_cache))
                 }
             }
         }
     }
-}
+    }
+    
 
 @Suppress("TooManyFunctions")
 @OptIn(UnstableApi::class)
