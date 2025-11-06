@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.ServiceConnection
-import android.content.Intent
 import android.os.IBinder
 import androidx.annotation.OptIn
 import androidx.core.app.NotificationCompat
@@ -27,7 +26,6 @@ import it.vfsfitvnm.vimusic.utils.ActionReceiver
 import it.vfsfitvnm.vimusic.utils.download
 import it.vfsfitvnm.vimusic.utils.intent
 import it.vfsfitvnm.vimusic.utils.toast
-import it.vfsfitvnm.vimusic.utils.logDebug
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -46,9 +44,6 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.firstOrNull
 import java.io.File
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
@@ -178,6 +173,14 @@ class PrecacheService : DownloadService(
             /* upstreamFactory = */ PlayerService.createYouTubeDataSourceResolverFactory(
                 context = this,
                 cache = cache,
+                chunkLength = null
+            ),
+            /* executor = */ executor
+        ).apply {
+            maxParallelDownloads = 3
+            minRetryCount = 1
+            requirements = Requirements(Requirements.NETWORK)
+
             addListener(
                 object : DownloadManager.Listener {
                     override fun onIdle(downloadManager: DownloadManager) =
@@ -196,8 +199,8 @@ class PrecacheService : DownloadService(
                 }
             )
         }
-                }
-            
+    }
+
     override fun getScheduler() = WorkManagerScheduler(this, DOWNLOAD_WORK_NAME)
 
     override fun getForegroundNotification(
@@ -237,45 +240,37 @@ class PrecacheService : DownloadService(
     }
 
     companion object {
-    @SuppressLint("UseKtx")
-    fun scheduleCache(context: Context, mediaItem: MediaItem) {
-        if (mediaItem.isLocal) return
+        @SuppressLint("UseKtx")
+        fun scheduleCache(context: Context, mediaItem: MediaItem) {
+            if (mediaItem.isLocal) return
 
-        val downloadRequest = DownloadRequest
-            .Builder(
-                /* id      = */ mediaItem.mediaId,
-                /* uri     = */ mediaItem.requestMetadata.mediaUri
-                    ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
-            )
-            .setCustomCacheKey(mediaItem.mediaId)
-            .setData(mediaItem.mediaId.encodeToByteArray())
-            .build()
+            val downloadRequest = DownloadRequest
+                .Builder(
+                    /* id      = */ mediaItem.mediaId,
+                    /* uri     = */ mediaItem.requestMetadata.mediaUri
+                        ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
+                )
+                .setCustomCacheKey(mediaItem.mediaId)
+                .setData(mediaItem.mediaId.encodeToByteArray())
+                .build()
 
-        transaction {
-            runCatching {
-                // ✅ FIX: Jangan insert lagi kalau song udah ada!
-                // Cuma insert kalau belum ada di database
-                runBlocking {
-                    val existingSong = Database.instance.song(mediaItem.mediaId).firstOrNull()
-                    if (existingSong == null) {
-                        Database.instance.insert(mediaItem)
+            transaction {
+                runCatching {
+                    Database.instance.insert(mediaItem)
+                }.also { if (it.isFailure) return@transaction }
+
+                coroutineScope.launch {
+                    context.download<PrecacheService>(downloadRequest).exceptionOrNull()?.let {
+                        if (it is CancellationException) throw it
+
+                        it.printStackTrace()
+                        context.toast(context.getString(R.string.error_pre_cache))
                     }
-                }
-            }.also { if (it.isFailure) return@transaction }
-
-            coroutineScope.launch {
-                context.download<PrecacheService>(downloadRequest).exceptionOrNull()?.let {
-                    if (it is CancellationException) throw it
-
-                    it.printStackTrace()
-                    context.toast(context.getString(R.string.error_pre_cache))
                 }
             }
         }
     }
-    }
-                }
-    
+}
 
 @Suppress("TooManyFunctions")
 @OptIn(UnstableApi::class)
