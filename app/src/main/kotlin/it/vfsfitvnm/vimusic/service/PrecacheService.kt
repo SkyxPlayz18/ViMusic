@@ -237,7 +237,7 @@ class PrecacheService : DownloadService(
         }
     }
 )
-
+            
     override fun getScheduler() = WorkManagerScheduler(this, DOWNLOAD_WORK_NAME)
 
     override fun getForegroundNotification(
