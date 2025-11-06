@@ -46,6 +46,8 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
@@ -184,42 +186,57 @@ class PrecacheService : DownloadService(
             requirements = Requirements(Requirements.NETWORK)
 
             addListener(
-                object : DownloadManager.Listener {
-                    override fun onIdle(downloadManager: DownloadManager) =
-                        mutableDownloadState.update { false }
-
-                    override fun onDownloadChanged(
-    downloadManager: DownloadManager,
-    download: Download,
-    finalException: Exception?
-) {
-    val id = download.request.id
-    logDebug(this@PrecacheService, "onDownloadChanged: $id, state=${download.state}")
-
-    if (download.state == Download.STATE_COMPLETED) {
-        val id = download.request.id
-        logDebug(this@PrecacheService, "✅ Download selesai untuk $id")
-
-        try {
-            Database.instance.updateIsCached(id, true)
-            logDebug(this@PrecacheService, "Database updated: $id ditandai offline")
-        } catch (e: Exception) {
-            logDebug(this@PrecacheService, "Gagal update DB untuk $id: ${e.message}")
+    object : DownloadManager.Listener {
+        override fun onIdle(downloadManager: DownloadManager) {
+            // update state for UI (progress)
+            mutableDownloadState.update { false }
         }
 
-        try {
-            val intent = Intent("it.vfsfitvnm.vimusic.DOWNLOAD_COMPLETED")
-            intent.putExtra("songId", id)
-            sendBroadcast(intent)
-        } catch (e: Exception) {
-            logDebug(this@PrecacheService, "Gagal kirim broadcast: ${e.message}")
-        }
-    }
+        override fun onDownloadChanged(
+            downloadManager: DownloadManager,
+            download: Download,
+            finalException: Exception?
+        ) {
+            // tetap kirim downloadManager ke channel supaya progressUpdaterJob berjalan
+            downloadQueue.trySend(downloadManager)
 
-    if (download.state == Download.STATE_FAILED) {
-        logDebug(this@PrecacheService, "❌ Download gagal: ${finalException?.stackTraceToString()}")
-    }
+            try {
+                val id = download.request.id
+                // kalau selesai, tandai di DB dan kirim broadcast agar UI refresh
+                if (download.state == Download.STATE_COMPLETED) {
+                    try {
+                        Database.instance.updateIsCached(id, true)
+                        // optional: juga tandai downloaded jika lo mau
+                        // Database.instance.updateIsDownloaded(id, true)
+                        logDebug(this@PrecacheService, "✅ Download selesai untuk $id — DB diupdate")
+                    } catch (e: Exception) {
+                        logDebug(this@PrecacheService, "⚠️ Gagal update DB untuk $id: ${e.message}")
                     }
+
+                    try {
+                        val intent = android.content.Intent("it.vfsfitvnm.vimusic.DOWNLOAD_COMPLETED")
+                        intent.putExtra("songId", id)
+                        sendBroadcast(intent)
+                        logDebug(this@PrecacheService, "📢 Broadcast DOWNLOAD_COMPLETED dikirim untuk $id")
+                    } catch (e: Exception) {
+                        logDebug(this@PrecacheService, "⚠️ Gagal kirim broadcast: ${e.message}")
+                    }
+                }
+
+                if (download.state == Download.STATE_FAILED) {
+                    logDebug(this@PrecacheService, "❌ Download gagal untuk ${download.request.id}: ${finalException?.stackTraceToString()}")
+                }
+            } catch (e: Exception) {
+                // safety net supaya listener gak ngebuat crash
+                logDebug(this@PrecacheService, "Exception di onDownloadChanged listener: ${e.stackTraceToString()}")
+            }
+        }
+
+        override fun onDownloadRemoved(downloadManager: DownloadManager, download: Download) {
+            downloadQueue.trySend(downloadManager)
+        }
+    }
+)
 
     override fun getScheduler() = WorkManagerScheduler(this, DOWNLOAD_WORK_NAME)
 
