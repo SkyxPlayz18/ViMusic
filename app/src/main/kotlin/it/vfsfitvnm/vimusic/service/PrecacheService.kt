@@ -31,7 +31,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -45,9 +44,9 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.firstOrNull
 import java.io.File
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
@@ -62,11 +61,10 @@ private val coroutineScope = CoroutineScope(
         CoroutineName("PrecacheService-Worker-Scope")
 )
 
-// While the class is not a singleton (lifecycle), there should only be one download state at a time
 private val mutableDownloadState = MutableStateFlow(false)
 val downloadState = mutableDownloadState.asStateFlow()
 
-private const val DOWNLOAD_NOTIFICATION_UPDATE_INTERVAL = 1000L // default
+private const val DOWNLOAD_NOTIFICATION_UPDATE_INTERVAL = 1000L
 private const val DOWNLOAD_WORK_NAME = "precacher-work"
 
 @OptIn(UnstableApi::class)
@@ -140,7 +138,7 @@ class PrecacheService : DownloadService(
         mutableDownloadState.update { false }
     }
 
-    @kotlin.OptIn(FlowPreview::class)
+    @kotlin.OptIn(kotlinx.coroutines.FlowPreview::class)
     override fun getDownloadManager(): DownloadManager {
         runCatching {
             if (bound) unbindService(serviceConnection)
@@ -186,75 +184,75 @@ class PrecacheService : DownloadService(
             requirements = Requirements(Requirements.NETWORK)
 
             addListener(
-    object : DownloadManager.Listener {
-        override fun onIdle(downloadManager: DownloadManager) =
-            mutableDownloadState.update { false }
+                object : DownloadManager.Listener {
+                    override fun onIdle(downloadManager: DownloadManager) =
+                        mutableDownloadState.update { false }
 
-        override fun onDownloadChanged(
-            downloadManager: DownloadManager,
-            download: Download,
-            finalException: Exception?
-        ) {
-            // ✅ UPDATE FORMAT TABLE SAAT DOWNLOAD SELESAI
-            when (download.state) {
-                Download.STATE_COMPLETED -> {
-                    val songId = download.request.id
-                    
-                    // Remove from scheduled set
-                    synchronized(Companion.scheduledIds) {
-                        Companion.scheduledIds.remove(songId)
-                    }
-                    
-                    // Update format table
-                    transaction {
-                        runCatching {
-                            val contentLength = download.bytesDownloaded
-                            if (contentLength > 0) {
-                                Database.instance.insert(
-                                    it.vfsfitvnm.vimusic.models.Format(
-                                        songId = songId,
-                                        contentLength = contentLength
-                                    )
-                                )
+                    override fun onDownloadChanged(
+                        downloadManager: DownloadManager,
+                        download: Download,
+                        finalException: Exception?
+                    ) {
+                        when (download.state) {
+                            Download.STATE_COMPLETED -> {
+                                val songId = download.request.id
+                                
+                                synchronized(scheduledIds) {
+                                    scheduledIds.remove(songId)
+                                }
+                                
+                                transaction {
+                                    runCatching {
+                                        val contentLength = download.bytesDownloaded
+                                        if (contentLength > 0) {
+                                            Database.instance.insert(
+                                                Format(
+                                                    songId = songId,
+                                                    contentLength = contentLength
+                                                )
+                                            )
+                                        }
+                                    }.onFailure {
+                                        it.printStackTrace()
+                                    }
+                                }
+                                
+                                toast("Download completed!")
                             }
-                        }.onFailure {
-                            it.printStackTrace()
+                            
+                            Download.STATE_FAILED -> {
+                                val songId = download.request.id
+                                synchronized(scheduledIds) {
+                                    scheduledIds.remove(songId)
+                                }
+                                toast("Download failed: ${finalException?.message ?: "Unknown error"}")
+                            }
+                            
+                            Download.STATE_STOPPED -> {
+                                val songId = download.request.id
+                                synchronized(scheduledIds) {
+                                    scheduledIds.remove(songId)
+                                }
+                            }
                         }
+                        
+                        downloadQueue.trySend(downloadManager).let { }
                     }
-                    
-                    toast("Download completed!")
-                }
-                
-                Download.STATE_FAILED -> {
-                    val songId = download.request.id
-                    synchronized(Companion.scheduledIds) {
-                        Companion.scheduledIds.remove(songId)
-                    }
-                    toast("Download failed: ${finalException?.message ?: "Unknown error"}")
-                }
-                
-                Download.STATE_STOPPED -> {
-                    val songId = download.request.id
-                    synchronized(Companion.scheduledIds) {
-                        Companion.scheduledIds.remove(songId)
-                    }
-                }
-            }
-            
-            downloadQueue.trySend(downloadManager).let { }
-        }
 
-        override fun onDownloadRemoved(
-            downloadManager: DownloadManager,
-            download: Download
-        ) {
-            synchronized(Companion.scheduledIds) {
-                Companion.scheduledIds.remove(download.request.id)
-            }
-            downloadQueue.trySend(downloadManager).let { }
+                    override fun onDownloadRemoved(
+                        downloadManager: DownloadManager,
+                        download: Download
+                    ) {
+                        synchronized(scheduledIds) {
+                            scheduledIds.remove(download.request.id)
+                        }
+                        downloadQueue.trySend(downloadManager).let { }
+                    }
+                }
+            )
         }
     }
-)
+
     override fun getScheduler() = WorkManagerScheduler(this, DOWNLOAD_WORK_NAME)
 
     override fun getForegroundNotification(
@@ -293,73 +291,71 @@ class PrecacheService : DownloadService(
         mutableDownloadState.update { false }
     }
 
-        companion object {
-    private val scheduledIds = mutableSetOf<String>()
-    
-    @SuppressLint("UseKtx")
-    fun scheduleCache(context: Context, mediaItem: MediaItem) {
-        if (mediaItem.isLocal) return
+    companion object {
+        private val scheduledIds = mutableSetOf<String>()
         
-        // ✅ PREVENT DUPLICATE DOWNLOADS
-        synchronized(scheduledIds) {
-            if (mediaItem.mediaId in scheduledIds) {
-                context.toast("Already downloading this song")
-                return
-            }
-            scheduledIds.add(mediaItem.mediaId)
-        }
-
-        val downloadRequest = DownloadRequest
-            .Builder(
-                /* id      = */ mediaItem.mediaId,
-                /* uri     = */ mediaItem.requestMetadata.mediaUri
-                    ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
-            )
-            .setCustomCacheKey(mediaItem.mediaId)
-            .setData(mediaItem.mediaId.encodeToByteArray())
-            .build()
-
-        transaction {
-            runCatching {
-                runBlocking {
-                    val existingSong = Database.instance.song(mediaItem.mediaId).firstOrNull()
-                    if (existingSong == null) {
-                        Database.instance.insert(mediaItem)
-                    }
+        @SuppressLint("UseKtx")
+        fun scheduleCache(context: Context, mediaItem: MediaItem) {
+            if (mediaItem.isLocal) return
+            
+            synchronized(scheduledIds) {
+                if (mediaItem.mediaId in scheduledIds) {
+                    context.toast("Already downloading this song")
+                    return
                 }
-            }.also { 
-                if (it.isFailure) {
-                    it.exceptionOrNull()?.printStackTrace()
-                    synchronized(scheduledIds) {
-                        scheduledIds.remove(mediaItem.mediaId)
-                    }
-                    return@transaction 
-                }
+                scheduledIds.add(mediaItem.mediaId)
             }
 
-            coroutineScope.launch {
-                context.download<PrecacheService>(downloadRequest)
-                    .onSuccess {
-                        withContext(Dispatchers.Main) {
-                            context.toast("Download started")
+            val downloadRequest = DownloadRequest
+                .Builder(
+                    /* id      = */ mediaItem.mediaId,
+                    /* uri     = */ mediaItem.requestMetadata.mediaUri
+                        ?: "https://youtube.com/watch?v=${mediaItem.mediaId}".toUri()
+                )
+                .setCustomCacheKey(mediaItem.mediaId)
+                .setData(mediaItem.mediaId.encodeToByteArray())
+                .build()
+
+            transaction {
+                runCatching {
+                    runBlocking {
+                        val existingSong = Database.instance.song(mediaItem.mediaId).firstOrNull()
+                        if (existingSong == null) {
+                            Database.instance.insert(mediaItem)
                         }
                     }
-                    .onFailure {
-                        if (it is CancellationException) throw it
-                        it.printStackTrace()
-                        withContext(Dispatchers.Main) {
-                            context.toast(context.getString(R.string.error_pre_cache))
-                        }
+                }.also { 
+                    if (it.isFailure) {
+                        it.exceptionOrNull()?.printStackTrace()
                         synchronized(scheduledIds) {
                             scheduledIds.remove(mediaItem.mediaId)
                         }
+                        return@transaction 
                     }
+                }
+
+                coroutineScope.launch {
+                    context.download<PrecacheService>(downloadRequest)
+                        .onSuccess {
+                            withContext(Dispatchers.Main) {
+                                context.toast("Download started")
+                            }
+                        }
+                        .onFailure {
+                            if (it is CancellationException) throw it
+                            it.printStackTrace()
+                            withContext(Dispatchers.Main) {
+                                context.toast(context.getString(R.string.error_pre_cache))
+                            }
+                            synchronized(scheduledIds) {
+                                scheduledIds.remove(mediaItem.mediaId)
+                            }
+                        }
+                }
             }
         }
     }
-        }
 }
-        
 
 @Suppress("TooManyFunctions")
 @OptIn(UnstableApi::class)
