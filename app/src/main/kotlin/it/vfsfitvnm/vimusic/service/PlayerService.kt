@@ -157,6 +157,7 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -512,7 +513,9 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
         mediaItem?.let { newItem ->
     coroutineScope.launch(Dispatchers.IO) {
         // ambil song lama (bisa null)
-        val old = Database.instance.getSongById(newItem.mediaId)
+        val old = runBlocking { 
+    Database.instance.song(newItem.mediaId).firstOrNull() 
+        }
 
         // buat Song yang ter-update, tapi jaga likedAt & totalPlayTime ms dll dari old jika ada
         val updated = old?.copy(
