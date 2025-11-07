@@ -1358,20 +1358,32 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
         private set
 
     fun createCache(context: Context): Cache {
-        val existing = cacheInstance
-        if (existing != null) return existing
+    val existing = cacheInstance
+    if (existing != null) return existing
 
-        synchronized(this) {
-            cacheInstance?.let { return it }
-            val dir = context.cacheDir.resolve("exoplayer").apply { if (!exists()) mkdirs() }
-            val cache = SimpleCache(
-                dir,
-                LeastRecentlyUsedCacheEvictor(DataPreferences.exoPlayerDiskCacheMaxSize.bytes),
-                StandaloneDatabaseProvider(context)
-            )
-            cacheInstance = cache
-            return cache
+    synchronized(this) {
+        cacheInstance?.let { return it }
+        
+        val dir = context.cacheDir.resolve("exoplayer").apply { 
+            if (!exists()) {
+                val created = mkdirs()
+                if (!created && !exists()) {
+                    throw IOException("Failed to create cache directory")
+                }
+            }
+            if (!canWrite()) {
+                throw IOException("Cache directory is not writable")
+            }
         }
+        
+        val cache = SimpleCache(
+            dir,
+            LeastRecentlyUsedCacheEvictor(DataPreferences.exoPlayerDiskCacheMaxSize.bytes),
+            StandaloneDatabaseProvider(context)
+        )
+        cacheInstance = cache
+        return cache
+    }
     }
     
         @Suppress("CyclomaticComplexMethod", "TooGenericExceptionCaught")
