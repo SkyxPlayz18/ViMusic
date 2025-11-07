@@ -45,6 +45,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import java.io.File
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
@@ -288,6 +290,7 @@ class PrecacheService : DownloadService(
         }
     }
         }
+}
         
 
 @Suppress("TooManyFunctions")
