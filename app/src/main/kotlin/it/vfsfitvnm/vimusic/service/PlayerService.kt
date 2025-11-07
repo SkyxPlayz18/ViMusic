@@ -98,6 +98,7 @@ import it.vfsfitvnm.vimusic.models.Event
 import it.vfsfitvnm.vimusic.models.QueuedMediaItem
 import it.vfsfitvnm.vimusic.models.Song
 import it.vfsfitvnm.vimusic.models.SongWithContentLength
+import it.vfsfitvnm.vimusic.models.Format
 import it.vfsfitvnm.vimusic.preferences.AppearancePreferences
 import it.vfsfitvnm.vimusic.preferences.DataPreferences
 import it.vfsfitvnm.vimusic.preferences.PlayerPreferences
