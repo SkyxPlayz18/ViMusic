@@ -500,60 +500,68 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-        if (
-            AppearancePreferences.hideExplicit &&
-            mediaItem?.mediaMetadata?.extras?.songBundle?.explicit == true
-        ) {
-            player.forceSeekToNext()
-            return
-        }
-
-        mediaItemState.update { mediaItem }
-
-        mediaItem?.let { newItem ->
-    coroutineScope.launch(Dispatchers.IO) {
-        // ambil song lama (bisa null)
-        val old = runBlocking { 
-    Database.instance.song(newItem.mediaId).firstOrNull() 
-        }
-
-        // buat Song yang ter-update, tapi jaga likedAt & totalPlayTime ms dll dari old jika ada
-        val updated = old?.copy(
-            title = newItem.mediaMetadata.title?.toString() ?: "",
-            artistsText = newItem.mediaMetadata.artist?.toString(),
-            durationText = newItem.mediaMetadata.extras?.getString("durationText"),
-            thumbnailUrl = newItem.mediaMetadata.artworkUri?.toString(),
-            album = newItem.mediaMetadata.albumTitle?.toString()
-        ) ?: Song(
-            id = newItem.mediaId,
-            title = newItem.mediaMetadata.title?.toString() ?: "",
-            artistsText = newItem.mediaMetadata.artist?.toString(),
-            durationText = newItem.mediaMetadata.extras?.getString("durationText"),
-            thumbnailUrl = newItem.mediaMetadata.artworkUri?.toString(),
-            album = newItem.mediaMetadata.albumTitle?.toString()
-            // likedAt, totalPlayTimeMs, loudnessBoost, blacklisted, explicit punya default di data class
-        )
-
-        // pakai upsert (kamu bilang upsert(song) ada)
-        Database.instance.upsert(updated)
+    if (
+        AppearancePreferences.hideExplicit &&
+        mediaItem?.mediaMetadata?.extras?.songBundle?.explicit == true
+    ) {
+        player.forceSeekToNext()
+        return
     }
-        }
 
-        maybeRecoverPlaybackError()
-        maybeNormalizeVolume()
-        maybeProcessRadio()
+    mediaItemState.update { mediaItem }
 
-        with(bitmapProvider) {
-            when {
-                mediaItem == null -> load(null)
-                mediaItem.mediaMetadata.artworkUri == lastUri -> bitmapProvider.load(lastUri)
+    mediaItem?.let { newItem ->
+        coroutineScope.launch(Dispatchers.IO) {
+            val old = runBlocking { 
+                Database.instance.song(newItem.mediaId).firstOrNull() 
+            }
+
+            val updated = old?.copy(
+                title = newItem.mediaMetadata.title?.toString() ?: old.title,
+                artistsText = newItem.mediaMetadata.artist?.toString() ?: old.artistsText,
+                durationText = newItem.mediaMetadata.extras?.getString("durationText") ?: old.durationText,
+                thumbnailUrl = newItem.mediaMetadata.artworkUri?.toString() ?: old.thumbnailUrl,
+                album = newItem.mediaMetadata.albumTitle?.toString() ?: old.album
+            ) ?: Song(
+                id = newItem.mediaId,
+                title = newItem.mediaMetadata.title?.toString() ?: "",
+                artistsText = newItem.mediaMetadata.artist?.toString(),
+                durationText = newItem.mediaMetadata.extras?.getString("durationText"),
+                thumbnailUrl = newItem.mediaMetadata.artworkUri?.toString(),
+                album = newItem.mediaMetadata.albumTitle?.toString()
+            )
+
+            Database.instance.upsert(updated)
+            
+            // ✅ VERIFY CACHE AND UPDATE FORMAT
+            if (!newItem.isLocal) {
+                val cachedLength = cache.getCachedBytes(newItem.mediaId, 0, Long.MAX_VALUE)
+                if (cachedLength > 0) {
+                    Database.instance.insert(
+                        Format(
+                            songId = newItem.mediaId,
+                            contentLength = cachedLength
+                        )
+                    )
+                }
             }
         }
-
-        if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO || reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK)
-            updateMediaSessionQueue(player.currentTimeline)
     }
 
+    maybeRecoverPlaybackError()
+    maybeNormalizeVolume()
+    maybeProcessRadio()
+
+    with(bitmapProvider) {
+        when {
+            mediaItem == null -> load(null)
+            mediaItem.mediaMetadata.artworkUri == lastUri -> bitmapProvider.load(lastUri)
+        }
+    }
+
+    if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO || reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK)
+        updateMediaSessionQueue(player.currentTimeline)
+}
     override fun onTimelineChanged(timeline: Timeline, reason: Int) {
         if (reason != Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) return
         updateMediaSessionQueue(timeline)
