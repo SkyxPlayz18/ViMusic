@@ -256,29 +256,39 @@ class PrecacheService : DownloadService(
             .build()
 
         transaction {
-            runCatching {
-                // ✅ FIX: Jangan insert lagi kalau song udah ada!
-                // Cuma insert kalau belum ada di database
-                runBlocking {
-                    val existingSong = Database.instance.song(mediaItem.mediaId).firstOrNull()
-                    if (existingSong == null) {
-                        Database.instance.insert(mediaItem)
-                    }
+    runCatching {
+        runBlocking {
+            val existingSong = Database.instance.song(mediaItem.mediaId).firstOrNull()
+            if (existingSong == null) {
+                Database.instance.insert(mediaItem)
+            }
+        }
+    }.also { 
+        if (it.isFailure) {
+            it.exceptionOrNull()?.printStackTrace()
+            return@transaction 
+        }
+    }
+
+    coroutineScope.launch {
+        context.download<PrecacheService>(downloadRequest)
+            .onSuccess {
+                withContext(Dispatchers.Main) {
+                    context.toast("Download started")
                 }
-            }.also { if (it.isFailure) return@transaction }
-
-            coroutineScope.launch {
-                context.download<PrecacheService>(downloadRequest).exceptionOrNull()?.let {
-                    if (it is CancellationException) throw it
-
-                    it.printStackTrace()
+            }
+            .onFailure {
+                if (it is CancellationException) throw it
+                it.printStackTrace()
+                withContext(Dispatchers.Main) {
                     context.toast(context.getString(R.string.error_pre_cache))
                 }
             }
+    }
         }
     }
         }
-}
+        
 
 @Suppress("TooManyFunctions")
 @OptIn(UnstableApi::class)
