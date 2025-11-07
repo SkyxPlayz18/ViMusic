@@ -186,25 +186,75 @@ class PrecacheService : DownloadService(
             requirements = Requirements(Requirements.NETWORK)
 
             addListener(
-                object : DownloadManager.Listener {
-                    override fun onIdle(downloadManager: DownloadManager) =
-                        mutableDownloadState.update { false }
+    object : DownloadManager.Listener {
+        override fun onIdle(downloadManager: DownloadManager) =
+            mutableDownloadState.update { false }
 
-                    override fun onDownloadChanged(
-                        downloadManager: DownloadManager,
-                        download: Download,
-                        finalException: Exception?
-                    ) = downloadQueue.trySend(downloadManager).let { }
-
-                    override fun onDownloadRemoved(
-                        downloadManager: DownloadManager,
-                        download: Download
-                    ) = downloadQueue.trySend(downloadManager).let { }
+        override fun onDownloadChanged(
+            downloadManager: DownloadManager,
+            download: Download,
+            finalException: Exception?
+        ) {
+            // ✅ UPDATE FORMAT TABLE SAAT DOWNLOAD SELESAI
+            when (download.state) {
+                Download.STATE_COMPLETED -> {
+                    val songId = download.request.id
+                    
+                    // Remove from scheduled set
+                    synchronized(Companion.scheduledIds) {
+                        Companion.scheduledIds.remove(songId)
+                    }
+                    
+                    // Update format table
+                    transaction {
+                        runCatching {
+                            val contentLength = download.bytesDownloaded
+                            if (contentLength > 0) {
+                                Database.instance.insert(
+                                    it.vfsfitvnm.vimusic.models.Format(
+                                        songId = songId,
+                                        contentLength = contentLength
+                                    )
+                                )
+                            }
+                        }.onFailure {
+                            it.printStackTrace()
+                        }
+                    }
+                    
+                    toast("Download completed!")
                 }
-            )
+                
+                Download.STATE_FAILED -> {
+                    val songId = download.request.id
+                    synchronized(Companion.scheduledIds) {
+                        Companion.scheduledIds.remove(songId)
+                    }
+                    toast("Download failed: ${finalException?.message ?: "Unknown error"}")
+                }
+                
+                Download.STATE_STOPPED -> {
+                    val songId = download.request.id
+                    synchronized(Companion.scheduledIds) {
+                        Companion.scheduledIds.remove(songId)
+                    }
+                }
+            }
+            
+            downloadQueue.trySend(downloadManager).let { }
+        }
+
+        override fun onDownloadRemoved(
+            downloadManager: DownloadManager,
+            download: Download
+        ) {
+            synchronized(Companion.scheduledIds) {
+                Companion.scheduledIds.remove(download.request.id)
+            }
+            downloadQueue.trySend(downloadManager).let { }
         }
     }
-
+)
     override fun getScheduler() = WorkManagerScheduler(this, DOWNLOAD_WORK_NAME)
 
     override fun getForegroundNotification(
