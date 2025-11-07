@@ -26,6 +26,7 @@ import it.vfsfitvnm.vimusic.utils.ActionReceiver
 import it.vfsfitvnm.vimusic.utils.download
 import it.vfsfitvnm.vimusic.utils.intent
 import it.vfsfitvnm.vimusic.utils.toast
+import it.vfsfitvnm.vimusic.models.Format
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -243,9 +244,20 @@ class PrecacheService : DownloadService(
     }
 
         companion object {
+    private val scheduledIds = mutableSetOf<String>()
+    
     @SuppressLint("UseKtx")
     fun scheduleCache(context: Context, mediaItem: MediaItem) {
         if (mediaItem.isLocal) return
+        
+        // ✅ PREVENT DUPLICATE DOWNLOADS
+        synchronized(scheduledIds) {
+            if (mediaItem.mediaId in scheduledIds) {
+                context.toast("Already downloading this song")
+                return
+            }
+            scheduledIds.add(mediaItem.mediaId)
+        }
 
         val downloadRequest = DownloadRequest
             .Builder(
@@ -258,39 +270,44 @@ class PrecacheService : DownloadService(
             .build()
 
         transaction {
-    runCatching {
-        runBlocking {
-            val existingSong = Database.instance.song(mediaItem.mediaId).firstOrNull()
-            if (existingSong == null) {
-                Database.instance.insert(mediaItem)
+            runCatching {
+                runBlocking {
+                    val existingSong = Database.instance.song(mediaItem.mediaId).firstOrNull()
+                    if (existingSong == null) {
+                        Database.instance.insert(mediaItem)
+                    }
+                }
+            }.also { 
+                if (it.isFailure) {
+                    it.exceptionOrNull()?.printStackTrace()
+                    synchronized(scheduledIds) {
+                        scheduledIds.remove(mediaItem.mediaId)
+                    }
+                    return@transaction 
+                }
             }
-        }
-    }.also { 
-        if (it.isFailure) {
-            it.exceptionOrNull()?.printStackTrace()
-            return@transaction 
-        }
-    }
 
-    coroutineScope.launch {
-        context.download<PrecacheService>(downloadRequest)
-            .onSuccess {
-                withContext(Dispatchers.Main) {
-                    context.toast("Download started")
-                }
+            coroutineScope.launch {
+                context.download<PrecacheService>(downloadRequest)
+                    .onSuccess {
+                        withContext(Dispatchers.Main) {
+                            context.toast("Download started")
+                        }
+                    }
+                    .onFailure {
+                        if (it is CancellationException) throw it
+                        it.printStackTrace()
+                        withContext(Dispatchers.Main) {
+                            context.toast(context.getString(R.string.error_pre_cache))
+                        }
+                        synchronized(scheduledIds) {
+                            scheduledIds.remove(mediaItem.mediaId)
+                        }
+                    }
             }
-            .onFailure {
-                if (it is CancellationException) throw it
-                it.printStackTrace()
-                withContext(Dispatchers.Main) {
-                    context.toast(context.getString(R.string.error_pre_cache))
-                }
-            }
-    }
         }
     }
         }
-}
         
 
 @Suppress("TooManyFunctions")
