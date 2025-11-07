@@ -179,7 +179,7 @@ class PrecacheService : DownloadService(
             /* executor = */ executor
         ).apply {
             maxParallelDownloads = 3
-            minRetryCount = 1
+            minRetryCount = 5
             requirements = Requirements(Requirements.NETWORK)
 
             addListener(
