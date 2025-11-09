@@ -512,59 +512,43 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
     mediaItemState.update { mediaItem }
 
     mediaItem?.let { newItem ->
-    coroutineScope.launch(Dispatchers.IO) {
-        // ✅ FIX: Ambil song yang udah ada (termasuk likedAt, totalPlayTimeMs, dll)
-        val existingSong = Database.instance.song(newItem.mediaId).firstOrNull()
-        
-        // ✅ HANYA UPDATE field yang perlu di-update, JANGAN OVERRIDE likedAt!
-        val updated = if (existingSong != null) {
-            // Song udah ada, update cuma yang perlu
-            existingSong.copy(
-                title = newItem.mediaMetadata.title?.toString()?.takeIf { it.isNotBlank() } 
-                    ?: existingSong.title,
-                artistsText = newItem.mediaMetadata.artist?.toString()
-                    ?: existingSong.artistsText,
-                durationText = newItem.mediaMetadata.extras?.songBundle?.durationText
-                    ?: existingSong.durationText,
-                thumbnailUrl = newItem.mediaMetadata.artworkUri?.toString()
-                    ?: existingSong.thumbnailUrl,
-                album = newItem.mediaMetadata.albumTitle?.toString()
-                    ?: existingSong.album,
-                explicit = newItem.mediaMetadata.extras?.songBundle?.explicit 
-                    ?: existingSong.explicit
-                // ⚠️ PENTING: likedAt, totalPlayTimeMs, loudnessBoost, blacklisted TIDAK DI-OVERRIDE!
-            )
-        } else {
-            // Song baru, buat dari scratch
-            Song(
-                id = newItem.mediaId,
-                title = newItem.mediaMetadata.title?.toString() ?: "",
-                artistsText = newItem.mediaMetadata.artist?.toString(),
-                durationText = newItem.mediaMetadata.extras?.songBundle?.durationText,
-                thumbnailUrl = newItem.mediaMetadata.artworkUri?.toString(),
-                album = newItem.mediaMetadata.albumTitle?.toString(),
-                explicit = newItem.mediaMetadata.extras?.songBundle?.explicit ?: false
-            )
-        }
-
-        Database.instance.upsert(updated)
-        
-        // ✅ Verify cache and update format (OPSIONAL, bisa di-skip kalau gak perlu)
-        if (!newItem.isLocal) {
-            runCatching {
-                val cachedLength = binder?.cache?.getCachedBytes(newItem.mediaId, 0, Long.MAX_VALUE)
-                if (cachedLength != null && cachedLength > 0) {
-                    Database.instance.insert(
-                        Format(
-                            songId = newItem.mediaId,
-                            contentLength = cachedLength
-                        )
-                    )
-                }
+        coroutineScope.launch(Dispatchers.IO) {
+            // ✅ Ambil song yang udah ada
+            val existingSong = Database.instance.song(newItem.mediaId).firstOrNull()
+            
+            // ✅ Update field yang perlu, preserve likedAt dll
+            val updated = if (existingSong != null) {
+                existingSong.copy(
+                    title = newItem.mediaMetadata.title?.toString()?.takeIf { it.isNotBlank() } 
+                        ?: existingSong.title,
+                    artistsText = newItem.mediaMetadata.artist?.toString()
+                        ?: existingSong.artistsText,
+                    durationText = newItem.mediaMetadata.extras?.songBundle?.durationText
+                        ?: existingSong.durationText,
+                    thumbnailUrl = newItem.mediaMetadata.artworkUri?.toString()
+                        ?: existingSong.thumbnailUrl,
+                    album = newItem.mediaMetadata.albumTitle?.toString()
+                        ?: existingSong.album,
+                    explicit = newItem.mediaMetadata.extras?.songBundle?.explicit 
+                        ?: existingSong.explicit
+                )
+            } else {
+                Song(
+                    id = newItem.mediaId,
+                    title = newItem.mediaMetadata.title?.toString() ?: "",
+                    artistsText = newItem.mediaMetadata.artist?.toString(),
+                    durationText = newItem.mediaMetadata.extras?.songBundle?.durationText,
+                    thumbnailUrl = newItem.mediaMetadata.artworkUri?.toString(),
+                    album = newItem.mediaMetadata.albumTitle?.toString(),
+                    explicit = newItem.mediaMetadata.extras?.songBundle?.explicit ?: false
+                )
             }
+
+            Database.instance.upsert(updated)
+            // ✅ STOP DI SINI! Gak ada verify cache lagi!
         }
     }
-}
+
     maybeRecoverPlaybackError()
     maybeNormalizeVolume()
     maybeProcessRadio()
@@ -578,12 +562,8 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
 
     if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO || reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK)
         updateMediaSessionQueue(player.currentTimeline)
-}
-    override fun onTimelineChanged(timeline: Timeline, reason: Int) {
-        if (reason != Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) return
-        updateMediaSessionQueue(timeline)
-        maybeSavePlayerQueue()
     }
+    
 
     override fun onPlayerError(error: PlaybackException) {
         super.onPlayerError(error)
