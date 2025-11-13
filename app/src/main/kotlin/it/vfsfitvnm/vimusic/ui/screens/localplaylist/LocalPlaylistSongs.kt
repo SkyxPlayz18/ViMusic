@@ -325,7 +325,7 @@ LaunchedEffect(reorderingState.isDragging) {
             )
             
             MenuEntry(
-                icon = R.drawable.image,
+                icon = R.drawable.photo,
                 text = stringResource(R.string.change_cover),
                 onClick = {
                     menuState.hide()
