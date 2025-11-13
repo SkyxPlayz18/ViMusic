@@ -399,4 +399,9 @@
         <item quantity="one">%1$d song</item>
         <item quantity="other">%1$d songs</item>
     </plurals>
+<string name="change_cover">Change cover</string>
+<string name="remove_cover">Remove cover</string>
+<string name="playlist_cover_updated">Playlist cover updated</string>
+<string name="error_updating_playlist_cover">Error updating playlist cover</string>
+<string name="playlist_cover_removed">Playlist cover removed</string>
 </resources>
