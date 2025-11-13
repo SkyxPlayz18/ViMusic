@@ -428,10 +428,12 @@ LaunchedEffect(reorderingState.isDragging) {
                     menuState.hide()
                     isDeleting = true
                 }
-            )
-        }
-    }
-}
+                                            )
+                                        }
+                                    }
+                                }
+                            )
+                        }
 
                         if (!isLandscape) thumbnailContent()
                     }
