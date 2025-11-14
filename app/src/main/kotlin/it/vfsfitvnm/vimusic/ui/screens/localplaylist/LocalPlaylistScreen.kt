@@ -32,24 +32,23 @@ fun LocalPlaylistScreen(playlistId: Long) {
         Content {
             var playlist by persist<Playlist?>("localPlaylist/$playlistId/playlist")
 
-            LaunchedEffect(Unit) {
-                Database.instance
-                    .playlist(playlistId)
-                    .filterNotNull()
-                    .distinctUntilChanged()
-                    .collect { playlist = it }
-            }
+LaunchedEffect(Unit) {
+    Database.instance
+        .playlist(playlistId)
+        .filterNotNull()
+        .distinctUntilChanged()
+        .collect { playlist = it }
+}
 
-            // Song fetching logic is removed from here
-
-            val thumbnailContent = remember(playlist) {
-                playlist?.thumbnail?.let { url ->
-                    adaptiveThumbnailContent(
-                        isLoading = false,
-                        url = url
-                    )
-                } ?: { }
-            }
+// ✅ FIX: React to thumbnail changes specifically
+val thumbnailContent = remember(playlist?.thumbnail) {
+    playlist?.thumbnail?.let { url ->
+        adaptiveThumbnailContent(
+            isLoading = false,
+            url = url
+        )
+    } ?: { }
+}
 
             Scaffold(
                 key = "localplaylist",
