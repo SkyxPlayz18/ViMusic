@@ -105,6 +105,8 @@ import it.vfsfitvnm.vimusic.utils.launchYouTubeMusic
 import it.vfsfitvnm.vimusic.utils.playingSong
 import it.vfsfitvnm.vimusic.utils.secondary
 import it.vfsfitvnm.vimusic.utils.semiBold
+import it.vfsfitvnm.vimusic.utils.PlaylistCoverManager
+import it.vfsfitvnm.vimusic.utils.rememberPlaylistCoverPicker
 import it.vfsfitvnm.vimusic.utils.toast
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
@@ -308,85 +310,124 @@ LaunchedEffect(reorderingState.isDragging) {
                                 color = colorPalette.text,
                                 modifier = Modifier.size(24.dp),
                                 onClick = {
-                                    menuState.display {
-                                        Menu {
-                                            MenuEntry(
-                                                icon = R.drawable.download,
-                                                text = stringResource(R.string.pre_cache),
-                                                onClick = {
-                                                    menuState.hide()
-                                                    filteredSongs.forEach { song ->
-                                                        PrecacheService.scheduleCache(context, song.asMediaItem)
-                                                    }
-                                                }
-                                            )
-                                            playlist.browseId?.let { browseId ->
-                                                MenuEntry(
-                                                    icon = R.drawable.sync,
-                                                    text = stringResource(R.string.sync),
-                                                    enabled = !loading,
-                                                    onClick = {
-                                                        menuState.hide()
-                                                        coroutineScope.launch {
-                                                            loading = true
-                                                            sync(playlist, browseId)
-                                                            loading = false
-                                                        }
-                                                    }
-                                                )
+    menuState.display {
+        Menu {
+            val pickCover = rememberPlaylistCoverPicker(
+                playlistId = playlist.id,
+                onCoverSelected = { path ->
+                    query {
+                        Database.instance.update(
+                            playlist.copy(thumbnail = "file://$path")
+                        )
+                    }
+                    menuState.hide()
+                }
+            )
+            
+            MenuEntry(
+                icon = R.drawable.image,
+                text = stringResource(R.string.change_cover),
+                onClick = {
+                    menuState.hide()
+                    pickCover()
+                }
+            )
+            
+            if (playlist.thumbnail?.startsWith("file://") == true) {
+                MenuEntry(
+                    icon = R.drawable.close,
+                    text = stringResource(R.string.remove_cover),
+                    onClick = {
+                        menuState.hide()
+                        PlaylistCoverManager.deleteCover(context, playlist.id)
+                        query {
+                            Database.instance.update(
+                                playlist.copy(thumbnail = null)
+                            )
+                        }
+                        context.toast(context.getString(R.string.playlist_cover_removed))
+                    }
+                )
+            }
+            
+            MenuEntry(
+                icon = R.drawable.download,
+                text = stringResource(R.string.pre_cache),
+                onClick = {
+                    menuState.hide()
+                    filteredSongs.forEach { song ->
+                        PrecacheService.scheduleCache(context, song.asMediaItem)
+                    }
+                }
+            )
+            
+            playlist.browseId?.let { browseId ->
+                MenuEntry(
+                    icon = R.drawable.sync,
+                    text = stringResource(R.string.sync),
+                    enabled = !loading,
+                    onClick = {
+                        menuState.hide()
+                        coroutineScope.launch {
+                            loading = true
+                            sync(playlist, browseId)
+                            loading = false
+                        }
+                    }
+                )
 
-                                                songs.firstOrNull()?.id?.let { firstSongId ->
-                                                    MenuEntry(
-                                                        icon = R.drawable.play,
-                                                        text = stringResource(R.string.watch_playlist_on_youtube),
-                                                        onClick = {
-                                                            menuState.hide()
-                                                            binder?.player?.pause()
-                                                            uriHandler.openUri(
-                                                                "https://youtube.com/watch?v=$firstSongId&list=${
-                                                                    playlist.browseId.drop(2)
-                                                                }"
-                                                            )
-                                                        }
-                                                    )
+                songs.firstOrNull()?.id?.let { firstSongId ->
+                    MenuEntry(
+                        icon = R.drawable.play,
+                        text = stringResource(R.string.watch_playlist_on_youtube),
+                        onClick = {
+                            menuState.hide()
+                            binder?.player?.pause()
+                            uriHandler.openUri(
+                                "https://youtube.com/watch?v=$firstSongId&list=${
+                                    playlist.browseId.drop(2)
+                                }"
+                            )
+                        }
+                    )
 
-                                                    MenuEntry(
-                                                        icon = R.drawable.musical_notes,
-                                                        text = stringResource(R.string.open_in_youtube_music),
-                                                        onClick = {
-                                                            menuState.hide()
-                                                            binder?.player?.pause()
-                                                            if (
-                                                                !launchYouTubeMusic(
-                                                                    context = context,
-                                                                    endpoint = "watch?v=$firstSongId&list=${
-                                                                        playlist.browseId.drop(2)
-                                                                    }"
-                                                                )
-                                                            ) context.toast(
-                                                                context.getString(R.string.youtube_music_not_installed)
-                                                            )
-                                                        }
-                                                    )
-                                                }
-                                            }
+                    MenuEntry(
+                        icon = R.drawable.musical_notes,
+                        text = stringResource(R.string.open_in_youtube_music),
+                        onClick = {
+                            menuState.hide()
+                            binder?.player?.pause()
+                            if (
+                                !launchYouTubeMusic(
+                                    context = context,
+                                    endpoint = "watch?v=$firstSongId&list=${
+                                        playlist.browseId.drop(2)
+                                    }"
+                                )
+                            ) context.toast(
+                                context.getString(R.string.youtube_music_not_installed)
+                            )
+                        }
+                    )
+                }
+            }
 
-                                            MenuEntry(
-                                                icon = R.drawable.pencil,
-                                                text = stringResource(R.string.rename),
-                                                onClick = {
-                                                    menuState.hide()
-                                                    isRenaming = true
-                                                }
-                                            )
+            MenuEntry(
+                icon = R.drawable.pencil,
+                text = stringResource(R.string.rename),
+                onClick = {
+                    menuState.hide()
+                    isRenaming = true
+                }
+            )
 
-                                            MenuEntry(
-                                                icon = R.drawable.trash,
-                                                text = stringResource(R.string.delete),
-                                                onClick = {
-                                                    menuState.hide()
-                                                    isDeleting = true
-                                                }
+            MenuEntry(
+                icon = R.drawable.trash,
+                text = stringResource(R.string.delete),
+                onClick = {
+                    menuState.hide()
+                    isDeleting = true
+                }
                                             )
                                         }
                                     }
