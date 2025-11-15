@@ -9,9 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import it.vfsfitvnm.vimusic.R
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -37,7 +35,7 @@ object PlaylistCoverManager {
                     input.copyTo(output)
                 }
             }
-            coverFile.absolutePath
+            "file://${coverFile.absolutePath}"  // ✅ Return with file:// prefix
         }
     }
     
@@ -52,7 +50,7 @@ object PlaylistCoverManager {
     
     fun getCoverPath(context: Context, playlistId: Long): String? {
         val coverFile = getCoverFile(context, playlistId)
-        return if (coverFile.exists()) coverFile.absolutePath else null
+        return if (coverFile.exists()) "file://${coverFile.absolutePath}" else null
     }
 }
 
@@ -65,13 +63,18 @@ fun rememberPlaylistCoverPicker(
     
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        uri?.let {
-            CoroutineScope(Dispatchers.Main).launch {
-                PlaylistCoverManager.saveCover(context, playlistId, it)
+    ) { uri: Uri? ->
+        // ✅ FIX: Callback harus di main thread!
+        if (uri != null) {
+            // Show immediate feedback
+            context.toast("Saving cover...")
+            
+            // Save in background
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                PlaylistCoverManager.saveCover(context, playlistId, uri)
                     .onSuccess { path ->
-                        onCoverSelected(path)
                         context.toast(context.getString(R.string.playlist_cover_updated))
+                        onCoverSelected(path)  // ✅ Trigger callback
                     }
                     .onFailure { error ->
                         error.printStackTrace()
@@ -80,6 +83,9 @@ fun rememberPlaylistCoverPicker(
                         )
                     }
             }
+        } else {
+            // User cancelled
+            context.toast("No image selected")
         }
     }
     
