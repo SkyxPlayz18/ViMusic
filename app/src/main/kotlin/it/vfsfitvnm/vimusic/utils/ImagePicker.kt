@@ -11,6 +11,8 @@ import androidx.compose.ui.platform.LocalContext
 import it.vfsfitvnm.vimusic.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 
