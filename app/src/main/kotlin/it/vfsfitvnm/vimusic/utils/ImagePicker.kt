@@ -9,10 +9,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import it.vfsfitvnm.vimusic.R
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
@@ -37,7 +38,7 @@ object PlaylistCoverManager {
                     input.copyTo(output)
                 }
             }
-            "file://${coverFile.absolutePath}"  // ✅ Return with file:// prefix
+            "file://${coverFile.absolutePath}"
         }
     }
     
@@ -66,17 +67,14 @@ fun rememberPlaylistCoverPicker(
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
-        // ✅ FIX: Callback harus di main thread!
         if (uri != null) {
-            // Show immediate feedback
             context.toast("Saving cover...")
             
-            // Save in background
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+            GlobalScope.launch(Dispatchers.Main) {
                 PlaylistCoverManager.saveCover(context, playlistId, uri)
                     .onSuccess { path ->
                         context.toast(context.getString(R.string.playlist_cover_updated))
-                        onCoverSelected(path)  // ✅ Trigger callback
+                        onCoverSelected(path)
                     }
                     .onFailure { error ->
                         error.printStackTrace()
@@ -86,7 +84,6 @@ fun rememberPlaylistCoverPicker(
                     }
             }
         } else {
-            // User cancelled
             context.toast("No image selected")
         }
     }
