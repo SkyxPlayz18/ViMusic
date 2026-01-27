@@ -1,8 +1,10 @@
 package it.vfsfitvnm.vimusic.utils
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -63,35 +65,64 @@ fun rememberPlaylistCoverPicker(
 ): () -> Unit {
     val context = LocalContext.current
     
-    // ✅ FIX: Use legacy GetContent contract (works on ALL devices!)
     val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            context.toast("Saving cover...")
-            
-            GlobalScope.launch(Dispatchers.Main) {
-                PlaylistCoverManager.saveCover(context, playlistId, uri)
-                    .onSuccess { path ->
-                        context.toast(context.getString(R.string.playlist_cover_updated))
-                        onCoverSelected(path)
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        // ✅ DEBUG: Always show what we got
+        context.toast("Result code: ${result.resultCode}")
+        
+        when (result.resultCode) {
+            Activity.RESULT_OK -> {
+                val uri = result.data?.data
+                
+                // ✅ DEBUG: Show URI
+                context.toast("URI: ${uri?.toString() ?: "NULL"}")
+                
+                if (uri != null) {
+                    context.toast("Saving cover...")
+                    
+                    GlobalScope.launch(Dispatchers.Main) {
+                        PlaylistCoverManager.saveCover(context, playlistId, uri)
+                            .onSuccess { path ->
+                                context.toast(context.getString(R.string.playlist_cover_updated))
+                                onCoverSelected(path)
+                            }
+                            .onFailure { error ->
+                                error.printStackTrace()
+                                context.toast("Error: ${error.message}")
+                            }
                     }
-                    .onFailure { error ->
-                        error.printStackTrace()
-                        context.toast(
-                            context.getString(R.string.error_updating_playlist_cover)
-                        )
-                    }
+                } else {
+                    context.toast("URI is null! Please try again")
+                }
             }
-        } else {
-            context.toast("No image selected")
+            Activity.RESULT_CANCELED -> {
+                context.toast("Selection cancelled")
+            }
+            else -> {
+                context.toast("Unknown result: ${result.resultCode}")
+            }
         }
     }
     
     return remember(playlistId) {
         {
-            // ✅ Launch with "image/*" MIME type
-            launcher.launch("image/*")
+            try {
+                // ✅ Method 1: Direct Gallery Pick
+                val galleryIntent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+                launcher.launch(galleryIntent)
+            } catch (e: Exception) {
+                try {
+                    // ✅ Method 2: Fallback to GetContent
+                    val contentIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                        type = "image/*"
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                    }
+                    launcher.launch(contentIntent)
+                } catch (e2: Exception) {
+                    context.toast("Error: ${e2.message}")
+                }
+            }
         }
     }
 }
