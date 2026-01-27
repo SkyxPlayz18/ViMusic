@@ -1,15 +1,14 @@
 package it.vfsfitvnm.vimusic.utils
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import it.vfsfitvnm.vimusic.R
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
@@ -64,8 +63,9 @@ fun rememberPlaylistCoverPicker(
 ): () -> Unit {
     val context = LocalContext.current
     
+    // ✅ FIX: Use legacy GetContent contract (works on ALL devices!)
     val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
+        contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
             context.toast("Saving cover...")
@@ -90,9 +90,8 @@ fun rememberPlaylistCoverPicker(
     
     return remember(playlistId) {
         {
-            launcher.launch(
-                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-            )
+            // ✅ Launch with "image/*" MIME type
+            launcher.launch("image/*")
         }
     }
 }
