@@ -1,10 +1,8 @@
 package it.vfsfitvnm.vimusic.utils
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -33,6 +31,12 @@ object PlaylistCoverManager {
         uri: Uri
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
+            // ✅ MIUI FIX: Take persistent permission
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+            
             val coverFile = getCoverFile(context, playlistId)
             context.contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(coverFile).use { output ->
@@ -47,15 +51,6 @@ object PlaylistCoverManager {
         val coverFile = getCoverFile(context, playlistId)
         return if (coverFile.exists()) coverFile.delete() else false
     }
-    
-    fun hasCover(context: Context, playlistId: Long): Boolean {
-        return getCoverFile(context, playlistId).exists()
-    }
-    
-    fun getCoverPath(context: Context, playlistId: Long): String? {
-        val coverFile = getCoverFile(context, playlistId)
-        return if (coverFile.exists()) "file://${coverFile.absolutePath}" else null
-    }
 }
 
 @Composable
@@ -66,63 +61,35 @@ fun rememberPlaylistCoverPicker(
     val context = LocalContext.current
     
     val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        // ✅ DEBUG: Always show what we got
-        context.toast("Result code: ${result.resultCode}")
-        
-        when (result.resultCode) {
-            Activity.RESULT_OK -> {
-                val uri = result.data?.data
-                
-                // ✅ DEBUG: Show URI
-                context.toast("URI: ${uri?.toString() ?: "NULL"}")
-                
-                if (uri != null) {
-                    context.toast("Saving cover...")
-                    
-                    GlobalScope.launch(Dispatchers.Main) {
-                        PlaylistCoverManager.saveCover(context, playlistId, uri)
-                            .onSuccess { path ->
-                                context.toast(context.getString(R.string.playlist_cover_updated))
-                                onCoverSelected(path)
-                            }
-                            .onFailure { error ->
-                                error.printStackTrace()
-                                context.toast("Error: ${error.message}")
-                            }
-                    }
-                } else {
-                    context.toast("URI is null! Please try again")
+        contract = object : ActivityResultContracts.GetContent() {
+            // ✅ MIUI FIX: Override to add persistent permission flag
+            override fun createIntent(context: Context, input: String): Intent {
+                return super.createIntent(context, input).apply {
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                    putExtra(Intent.EXTRA_LOCAL_ONLY, true)
                 }
             }
-            Activity.RESULT_CANCELED -> {
-                context.toast("Selection cancelled")
-            }
-            else -> {
-                context.toast("Unknown result: ${result.resultCode}")
+        }
+    ) { uri: Uri? ->
+        if (uri != null) {
+            GlobalScope.launch(Dispatchers.IO) {
+                val result = PlaylistCoverManager.saveCover(context, playlistId, uri)
+                
+                withContext(Dispatchers.Main) {
+                    result.onSuccess { path ->
+                        onCoverSelected(path)
+                        context.toast(context.getString(R.string.playlist_cover_updated))
+                    }.onFailure { error ->
+                        error.printStackTrace()
+                        context.toast("Error: ${error.message}")
+                    }
+                }
             }
         }
     }
     
     return remember(playlistId) {
-        {
-            try {
-                // ✅ Method 1: Direct Gallery Pick
-                val galleryIntent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
-                launcher.launch(galleryIntent)
-            } catch (e: Exception) {
-                try {
-                    // ✅ Method 2: Fallback to GetContent
-                    val contentIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                        type = "image/*"
-                        addCategory(Intent.CATEGORY_OPENABLE)
-                    }
-                    launcher.launch(contentIntent)
-                } catch (e2: Exception) {
-                    context.toast("Error: ${e2.message}")
-                }
-            }
-        }
+        { launcher.launch("image/*") }
     }
 }
