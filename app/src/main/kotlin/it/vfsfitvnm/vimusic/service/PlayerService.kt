@@ -586,21 +586,24 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
     
     // ✅ Handle URL expiration or connection errors - auto retry once
     val cause = error.cause
-    if (cause is HttpDataSource.HttpDataSourceException || 
-        cause is HttpDataSource.InvalidResponseCodeException) {
-        
-        android.util.Log.w("PlayerService", "Network/HTTP error - Attempting to refresh and retry")
-        
-        // Clear cache untuk media item ini agar fetch URL baru
-        player.currentMediaItem?.mediaId?.let { mediaId ->
-            cache.removeResource(cache.getCacheKeyForMediaItem(mediaId))
-        }
-        
-        // Retry playback
+if (cause is HttpDataSource.HttpDataSourceException || 
+    cause is HttpDataSource.InvalidResponseCodeException) {
+    
+    android.util.Log.w("PlayerService", "Network/HTTP error - Attempting to refresh and retry")
+    
+    // Retry playback dengan prepare ulang
+    val currentPosition = player.currentPosition
+    val currentMediaItem = player.currentMediaItem
+    
+    if (currentMediaItem != null) {
+        player.setMediaItem(currentMediaItem)
+        player.seekTo(currentPosition)
         player.prepare()
         player.play()
-        return
     }
+    
+    return
+}
 
     // ✅ Skip ke lagu berikutnya kalo auto-skip enabled
     if (!PlayerPreferences.skipOnError || !player.hasNextMediaItem()) return
