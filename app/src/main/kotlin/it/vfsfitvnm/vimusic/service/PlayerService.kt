@@ -1466,6 +1466,41 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
     throw lastError ?: Exception("Failed to load playback URL after 3 attempts")
                 }
 
+                .handleUnknownErrors {
+    uriCache.clear()
+}
+.retryIf<UnplayableException>(
+    maxRetries = 10,
+    printStackTrace = true
+)
+// ✅ ADD THIS: Fallback to NewPipe if Innertube fails
+.withFallback { dataSpec ->
+    val videoId = dataSpec.key ?: error("No video ID found")
+    
+    runBlocking(Dispatchers.IO) {
+        try {
+            // Try NewPipe as fallback
+            val newPipeUrl = NewPipeUtils.getStreamUrl(videoId)
+            if (newPipeUrl != null) {
+                dataSpec.withUri(newPipeUrl.toUri())
+            } else {
+                throw Exception("NewPipe fallback also failed")
+            }
+        } catch (e: Exception) {
+            // Both Innertube and NewPipe failed
+            throw UnplayableException("Unable to get playback URL from any source: ${e.message}")
+        }
+    }
+}
+.retryIf(
+    maxRetries = 5,
+    printStackTrace = true
+) { ex ->
+    ex.findCause<InvalidResponseCodeException>()?.responseCode == 403 ||
+        ex.findCause<ClientRequestException>()?.response?.status?.value == 403 ||
+        ex.findCause<InvalidHttpCodeException>() != null
+}
+
                 val uri = url.toUri()
 
                 uriCache.push(
