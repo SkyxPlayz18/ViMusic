@@ -566,43 +566,36 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
     
 
     override fun onPlayerError(error: PlaybackException) {
-    super.onPlayerError(error)
-    
-    // ✅ Log error details for debugging
-    android.util.Log.e("PlayerService", "Playback error: ${error.message}", error)
-    error.cause?.let {
-        android.util.Log.e("PlayerService", "Error cause: ${it.message}", it)
-    }
+        super.onPlayerError(error)
 
-    if (
-        error.findCause<InvalidResponseCodeException>()?.responseCode == 416
-    ) {
-        player.pause()
-        player.prepare()
-        player.play()
-        return
-    }
+        if (
+            error.findCause<InvalidResponseCodeException>()?.responseCode == 416
+        ) {
+            player.pause()
+            player.prepare()
+            player.play()
+            return
+        }
 
-    if (!PlayerPreferences.skipOnError || !player.hasNextMediaItem()) return
+        if (!PlayerPreferences.skipOnError || !player.hasNextMediaItem()) return
 
-    val prev = player.currentMediaItem ?: return
-    player.seekToNextMediaItem()
+        val prev = player.currentMediaItem ?: return
+        player.seekToNextMediaItem()
 
-    ServiceNotifications.autoSkip.sendNotification(this) {
-        this
-            .setSmallIcon(R.drawable.alert_circle)
-            .setCategory(NotificationCompat.CATEGORY_ERROR)
-            .setOnlyAlertOnce(false)
-            .setContentIntent(activityPendingIntent<MainActivity>())
-            .setContentText(
-                prev.mediaMetadata.title?.let {
-                    getString(R.string.skip_on_error_notification, it)
-                } ?: getString(R.string.skip_on_error_notification_unknown_song)
-            )
-            .setContentTitle(getString(R.string.skip_on_error))
+        ServiceNotifications.autoSkip.sendNotification(this) {
+            this
+                .setSmallIcon(R.drawable.alert_circle)
+                .setCategory(NotificationCompat.CATEGORY_ERROR)
+                .setOnlyAlertOnce(false)
+                .setContentIntent(activityPendingIntent<MainActivity>())
+                .setContentText(
+                    prev.mediaMetadata.title?.let {
+                        getString(R.string.skip_on_error_notification, it)
+                    } ?: getString(R.string.skip_on_error_notification_unknown_song)
+                )
+                .setContentTitle(getString(R.string.skip_on_error))
+        }
     }
-    }
-    
 
     private fun updateMediaSessionQueue(timeline: Timeline) {
         val builder = MediaDescription.Builder()
@@ -1443,70 +1436,14 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
                     .ranged(cachedUri.meta)
             } ?: run {
                 val (url, contentLength) = runBlocking(Dispatchers.IO) {
-    // ✅ Retry up to 3 times with different strategies
-    var lastError: Exception? = null
-    
-    repeat(3) { attempt ->
-        try {
-            val body = Innertube.player(PlayerBody(videoId = requestedMediaId))?.getOrThrow()
-                ?: throw Exception("API response was null.")
-            
-            // ✅ Try adaptive formats first, then regular formats
-            val format = body.streamingData?.highestQualityFormat
-                ?: body.streamingData?.formats?.firstOrNull { it.isAudio }
-                ?: throw Exception("Could not find a playable audio format in the response.")
-            
-            val finalUrl = format.findUrl(requestedMediaId)
-                ?: throw Exception("Failed to generate a playable URL from the selected format.")
-            
-            return@runBlocking Pair(finalUrl, format.contentLength)
-        } catch (e: Exception) {
-            lastError = e
-            if (attempt < 2) {
-                // Wait before retry
-                delay(500L * (attempt + 1))
-            }
-        }
-    }
-    
-    // ✅ All retries failed
-    throw lastError ?: Exception("Failed to load playback URL after 3 attempts")
+                    val body = Innertube.player(PlayerBody(videoId = requestedMediaId))?.getOrThrow()
+                        ?: throw Exception("API response was null.")
+                    val format = body.streamingData?.highestQualityFormat
+                        ?: throw Exception("Could not find a playable audio format in the response.")
+                    val finalUrl = format.findUrl(requestedMediaId)
+                        ?: throw Exception("Failed to generate a playable URL from the selected format.")
+                    Pair(finalUrl, format.contentLength)
                 }
-
-                .handleUnknownErrors {
-    uriCache.clear()
-}
-.retryIf<UnplayableException>(
-    maxRetries = 10,
-    printStackTrace = true
-)
-// ✅ ADD THIS: Fallback to NewPipe if Innertube fails
-.withFallback { dataSpec ->
-    val videoId = dataSpec.key ?: error("No video ID found")
-    
-    runBlocking(Dispatchers.IO) {
-        try {
-            // Try NewPipe as fallback
-            val newPipeUrl = NewPipeUtils.getStreamUrl(videoId)
-            if (newPipeUrl != null) {
-                dataSpec.withUri(newPipeUrl.toUri())
-            } else {
-                throw Exception("NewPipe fallback also failed")
-            }
-        } catch (e: Exception) {
-            // Both Innertube and NewPipe failed
-            throw UnplayableException("Unable to get playback URL from any source: ${e.message}")
-        }
-    }
-}
-.retryIf(
-    maxRetries = 5,
-    printStackTrace = true
-) { ex ->
-    ex.findCause<InvalidResponseCodeException>()?.responseCode == 403 ||
-        ex.findCause<ClientRequestException>()?.response?.status?.value == 403 ||
-        ex.findCause<InvalidHttpCodeException>() != null
-}
 
                 val uri = url.toUri()
 
