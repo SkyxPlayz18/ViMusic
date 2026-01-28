@@ -567,35 +567,60 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
     
 
     override fun onPlayerError(error: PlaybackException) {
-        super.onPlayerError(error)
+    super.onPlayerError(error)
+    
+    // ✅ Log error untuk debugging
+    android.util.Log.e("PlayerService", "Playback error occurred", error)
+    error.cause?.let { 
+        android.util.Log.e("PlayerService", "Error cause: ${it.message}", it) 
+    }
 
-        if (
-            error.findCause<InvalidResponseCodeException>()?.responseCode == 416
-        ) {
-            player.pause()
-            player.prepare()
-            player.play()
-            return
+    // ✅ Handle HTTP 416 (Range Not Satisfiable)
+    if (error.findCause<InvalidResponseCodeException>()?.responseCode == 416) {
+        android.util.Log.w("PlayerService", "HTTP 416 - Retrying playback")
+        player.pause()
+        player.prepare()
+        player.play()
+        return
+    }
+    
+    // ✅ Handle URL expiration or connection errors - auto retry once
+    val cause = error.cause
+    if (cause is HttpDataSource.HttpDataSourceException || 
+        cause is HttpDataSource.InvalidResponseCodeException) {
+        
+        android.util.Log.w("PlayerService", "Network/HTTP error - Attempting to refresh and retry")
+        
+        // Clear cache untuk media item ini agar fetch URL baru
+        player.currentMediaItem?.mediaId?.let { mediaId ->
+            cache.removeResource(cache.getCacheKeyForMediaItem(mediaId))
         }
+        
+        // Retry playback
+        player.prepare()
+        player.play()
+        return
+    }
 
-        if (!PlayerPreferences.skipOnError || !player.hasNextMediaItem()) return
+    // ✅ Skip ke lagu berikutnya kalo auto-skip enabled
+    if (!PlayerPreferences.skipOnError || !player.hasNextMediaItem()) return
 
-        val prev = player.currentMediaItem ?: return
-        player.seekToNextMediaItem()
+    val prev = player.currentMediaItem ?: return
+    player.seekToNextMediaItem()
 
-        ServiceNotifications.autoSkip.sendNotification(this) {
-            this
-                .setSmallIcon(R.drawable.alert_circle)
-                .setCategory(NotificationCompat.CATEGORY_ERROR)
-                .setOnlyAlertOnce(false)
-                .setContentIntent(activityPendingIntent<MainActivity>())
-                .setContentText(
-                    prev.mediaMetadata.title?.let {
-                        getString(R.string.skip_on_error_notification, it)
-                    } ?: getString(R.string.skip_on_error_notification_unknown_song)
-                )
-                .setContentTitle(getString(R.string.skip_on_error))
-        }
+    ServiceNotifications.autoSkip.sendNotification(this) {
+        this
+            .setSmallIcon(R.drawable.alert_circle)
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setOnlyAlertOnce(false)
+            .setContentIntent(activityPendingIntent<MainActivity>())
+            .setContentText(
+                prev.mediaMetadata.title?.let {
+                    getString(R.string.skip_on_error_notification, it)
+                } ?: getString(R.string.skip_on_error_notification_unknown_song)
+            )
+            .setContentTitle(getString(R.string.skip_on_error))
+    }
     }
 
     private fun updateMediaSessionQueue(timeline: Timeline) {
