@@ -1465,7 +1465,14 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
                     val body = Innertube.player(PlayerBody(videoId = requestedMediaId))?.getOrThrow()
                         ?: throw Exception("API response was null.")
                     val format = body.streamingData?.highestQualityFormat
-                        ?: throw Exception("Could not find a playable audio format in the response.")
+    ?: body.streamingData?.formats?.maxByOrNull { it.bitrate ?: 0 }
+    ?: body.streamingData?.adaptiveFormats?.firstOrNull { 
+        it.mimeType?.startsWith("audio/") == true 
+    }
+    ?: run {
+        android.util.Log.e("PlayerService", "No playable format found. StreamingData: ${body.streamingData}")
+        error("Could not find any playable audio format")
+    }
                     val finalUrl = format.findUrl(requestedMediaId)
                         ?: throw Exception("Failed to generate a playable URL from the selected format.")
                     Pair(finalUrl, format.contentLength)
