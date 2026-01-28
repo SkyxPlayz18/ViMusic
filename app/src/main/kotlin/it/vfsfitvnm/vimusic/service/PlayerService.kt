@@ -1436,13 +1436,34 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
                     .ranged(cachedUri.meta)
             } ?: run {
                 val (url, contentLength) = runBlocking(Dispatchers.IO) {
-                    val body = Innertube.player(PlayerBody(videoId = requestedMediaId))?.getOrThrow()
-                        ?: throw Exception("API response was null.")
-                    val format = body.streamingData?.highestQualityFormat
-                        ?: throw Exception("Could not find a playable audio format in the response.")
-                    val finalUrl = format.findUrl(requestedMediaId)
-                        ?: throw Exception("Failed to generate a playable URL from the selected format.")
-                    Pair(finalUrl, format.contentLength)
+    // ✅ Retry up to 3 times with different strategies
+    var lastError: Exception? = null
+    
+    repeat(3) { attempt ->
+        try {
+            val body = Innertube.player(PlayerBody(videoId = requestedMediaId))?.getOrThrow()
+                ?: throw Exception("API response was null.")
+            
+            // ✅ Try adaptive formats first, then regular formats
+            val format = body.streamingData?.highestQualityFormat
+                ?: body.streamingData?.formats?.firstOrNull { it.isAudio }
+                ?: throw Exception("Could not find a playable audio format in the response.")
+            
+            val finalUrl = format.findUrl(requestedMediaId)
+                ?: throw Exception("Failed to generate a playable URL from the selected format.")
+            
+            return@runBlocking Pair(finalUrl, format.contentLength)
+        } catch (e: Exception) {
+            lastError = e
+            if (attempt < 2) {
+                // Wait before retry
+                delay(500L * (attempt + 1))
+            }
+        }
+    }
+    
+    // ✅ All retries failed
+    throw lastError ?: Exception("Failed to load playback URL after 3 attempts")
                 }
 
                 val uri = url.toUri()
