@@ -16,7 +16,6 @@ detekt = "1.23.8"
 workmanager = "2.10.2"
 credentials = "1.5.0"
 coil = "3.3.0"
-newpipeextractor = "670828a"
 
 [plugins]
 android_application = { id = "com.android.application", version.ref = "agp" }
@@ -96,4 +95,4 @@ desugaring = { module = "com.android.tools:desugar_jdk_libs", version = "2.1.5" 
 
 detekt_compose = { module = "io.nlopez.compose.rules:detekt", version = "0.4.26" }
 detekt_formatting = { module = "io.gitlab.arturbosch.detekt:detekt-formatting", version.ref = "detekt" }
-newpipeextractor = { module = "com.github.TeamNewPipe:NewPipeExtractor", version.ref = "newpipeextractor" }
+newpipe-extractor = { group = "com.github.InfinityLoop1308", name = "PipePipeExtractor", version = "v4.7.8" }
