@@ -52,7 +52,7 @@ private fun validateStreamUrl(url: String): Boolean {
     }.getOrElse { false }
 }
 
-suspend fun Innertube.player(body: PlayerBody): Result<PlayerResponse>? {
+suspend fun Innertube.player(body: PlayerBody): PlayerResponse? {
     return runCatching {
         // ✅ Step 1: Fetch main player response
         val mainPlayerResponse = client.post("/player") {
