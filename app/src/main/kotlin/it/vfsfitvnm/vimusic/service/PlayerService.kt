@@ -1465,17 +1465,18 @@ if (cause is HttpDataSource.HttpDataSourceException ||
                     .ranged(cachedUri.meta)
             } ?: run {
                 val (url, contentLength) = runBlocking(Dispatchers.IO) {
-                    val body = Innertube.player(PlayerBody(videoId = requestedMediaId))?.getOrThrow()
-                        ?: throw Exception("API response was null.")
-                    val format = body.streamingData?.highestQualityFormat
+                    val body = runBlocking(Dispatchers.IO) {
+    Innertube.player(PlayerBody(videoId = requestedMediaId))
+}?.getOrNull() ?: throw PlaybackException(
+    "Failed to retrieve player data",
+    null,
+    PlaybackException.ERROR_CODE_REMOTE_ERROR
+)
+
+val format = body.streamingData?.highestQualityFormat
     ?: body.streamingData?.formats?.maxByOrNull { it.bitrate ?: 0 }
-    ?: body.streamingData?.adaptiveFormats?.firstOrNull { 
-        it.mimeType?.startsWith("audio/") == true 
-    }
-    ?: run {
-        android.util.Log.e("PlayerService", "No playable format found. StreamingData: ${body.streamingData}")
-        error("Could not find any playable audio format")
-    }
+    ?: body.streamingData?.adaptiveFormats?.firstOrNull { it.mimeType?.startsWith("audio/") == true }
+    ?: error("Could not find any adaptive format")
                     val finalUrl = format.findUrl(requestedMediaId)
                         ?: throw Exception("Failed to generate a playable URL from the selected format.")
                     Pair(finalUrl, format.contentLength)
