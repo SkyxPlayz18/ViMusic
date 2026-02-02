@@ -1,103 +1,61 @@
 package it.vfsfitvnm.providers.innertube.models
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/**
- * PlayerResponse with [it.vfsfitvnm.providers.innertube.models.Context.DefaultWebNoLang] client
- */
 @Serializable
 data class PlayerResponse(
-    val playabilityStatus: PlayabilityStatus,
+    val playabilityStatus: PlayabilityStatus?,
     val playerConfig: PlayerConfig?,
     val streamingData: StreamingData?,
-    val videoDetails: VideoDetails?,
-    @SerialName("playbackTracking")
-    val playbackTracking: PlaybackTracking?,
+    val videoDetails: VideoDetails?
 ) {
     @Serializable
     data class PlayabilityStatus(
-        val status: String,
-        val reason: String?,
+        val status: String?,
+        val reason: String?
     )
 
     @Serializable
     data class PlayerConfig(
-        val audioConfig: AudioConfig,
+        val audioConfig: AudioConfig?
     ) {
         @Serializable
         data class AudioConfig(
-            val loudnessDb: Double?,
-            val perceptualLoudnessDb: Double?,
+            val loudnessDb: Double?
         )
     }
 
     @Serializable
     data class StreamingData(
+        val adaptiveFormats: List<Format>?,
         val formats: List<Format>?,
-        val adaptiveFormats: List<Format>,
-        val expiresInSeconds: Int,
+        val expiresInSeconds: Int?
     ) {
         @Serializable
         data class Format(
-            val itag: Int,
-            val url: String?,
-            val mimeType: String,
-            val bitrate: Int,
-            val width: Int?,
-            val height: Int?,
-            val contentLength: Long?,
-            val quality: String,
-            val fps: Int?,
-            val qualityLabel: String?,
+            val itag: Int?,
+            val mimeType: String?,
+            val bitrate: Int?,
             val averageBitrate: Int?,
+            val contentLength: Long?,
             val audioQuality: String?,
-            val approxDurationMs: String?,
             val audioSampleRate: Int?,
             val audioChannels: Int?,
             val loudnessDb: Double?,
-            val lastModified: Long?,
-            val signatureCipher: String?,
+            val url: String?,
+            val signatureCipher: String?
         ) {
             val isAudio: Boolean
-                get() = width == null
+                get() = mimeType?.startsWith("audio/") == true
         }
     }
 
     @Serializable
     data class VideoDetails(
-        val videoId: String,
-        val title: String,
-        val author: String,
-        val channelId: String,
-        val lengthSeconds: String,
-        val musicVideoType: String?,
-        val viewCount: String,
+        val videoId: String?,
+        val title: String?,
+        val lengthSeconds: String?,
+        val channelId: String?,
+        val author: String?
     )
-
-    @Serializable
-    data class PlaybackTracking(
-        @SerialName("videostatsPlaybackUrl")
-        val videostatsPlaybackUrl: VideostatsPlaybackUrl?,
-        @SerialName("videostatsWatchtimeUrl")
-        val videostatsWatchtimeUrl: VideostatsWatchtimeUrl?,
-        @SerialName("atrUrl")
-        val atrUrl: AtrUrl?,
-    ) {
-        @Serializable
-        data class VideostatsPlaybackUrl(
-            @SerialName("baseUrl")
-            val baseUrl: String?,
-        )
-        @Serializable
-        data class VideostatsWatchtimeUrl(
-            @SerialName("baseUrl")
-            val baseUrl: String?,
-        )
-        @Serializable
-        data class AtrUrl(
-            @SerialName("baseUrl")
-            val baseUrl: String?,
-        )
-    }
 }
