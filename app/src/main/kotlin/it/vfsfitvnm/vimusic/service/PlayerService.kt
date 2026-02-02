@@ -190,9 +190,9 @@ private const val LIKE_ACTION = "LIKE"
 private const val LOOP_ACTION = "LOOP"
 
 internal val PlayerResponse.StreamingData.highestQualityFormat: PlayerResponse.StreamingData.Format?
-    get() = (adaptiveFormats + formats.orEmpty())
+    get() = (adaptiveFormats.orEmpty() + formats.orEmpty())
         .filter { it.isAudio }
-        .maxByOrNull { it.bitrate }
+        .maxByOrNull { it.bitrate ?: 0 }
 
 internal fun PlayerResponse.StreamingData.Format.findUrl(videoId: String): String? {
     return NewPipeUtils.getStreamUrl(this, videoId).getOrNull()
