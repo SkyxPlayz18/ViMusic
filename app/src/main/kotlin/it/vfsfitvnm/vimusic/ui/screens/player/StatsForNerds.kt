@@ -98,10 +98,9 @@ fun StatsForNerds(
                                         songId = mediaId,
                                         itag = format.itag,
                                         mimeType = format.mimeType,
-                                        bitrate = format.bitrate.toLong(),
+                                        bitrate = format.bitrate?.toLong() ?: 0L,
                                         loudnessDb = response.playerConfig?.audioConfig?.loudnessDb?.toFloat(),
                                         contentLength = format.contentLength,
-                                        lastModified = format.lastModified
                                     )
                                 )
                             }
