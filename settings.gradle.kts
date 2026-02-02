@@ -12,6 +12,10 @@ dependencyResolutionManagement {
     }
 }
 
+dependencies {
+	        implementation("com.github.InfinityLoop1308:PipePipeExtractor:Tag")
+	}
+
 pluginManagement {
     resolutionStrategy {
         repositories {
