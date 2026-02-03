@@ -44,7 +44,6 @@ import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException
-import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
@@ -190,9 +189,9 @@ private const val LIKE_ACTION = "LIKE"
 private const val LOOP_ACTION = "LOOP"
 
 internal val PlayerResponse.StreamingData.highestQualityFormat: PlayerResponse.StreamingData.Format?
-    get() = (adaptiveFormats.orEmpty() + formats.orEmpty())
+    get() = (adaptiveFormats + formats.orEmpty())
         .filter { it.isAudio }
-        .maxByOrNull { it.bitrate ?: 0 }
+        .maxByOrNull { it.bitrate }
 
 internal fun PlayerResponse.StreamingData.Format.findUrl(videoId: String): String? {
     return NewPipeUtils.getStreamUrl(this, videoId).getOrNull()
@@ -567,63 +566,35 @@ class PlayerService : InvincibleService(), Player.Listener, PlaybackStatsListene
     
 
     override fun onPlayerError(error: PlaybackException) {
-    super.onPlayerError(error)
-    
-    // ✅ Log error untuk debugging
-    android.util.Log.e("PlayerService", "Playback error occurred", error)
-    error.cause?.let { 
-        android.util.Log.e("PlayerService", "Error cause: ${it.message}", it) 
-    }
+        super.onPlayerError(error)
 
-    // ✅ Handle HTTP 416 (Range Not Satisfiable)
-    if (error.findCause<InvalidResponseCodeException>()?.responseCode == 416) {
-        android.util.Log.w("PlayerService", "HTTP 416 - Retrying playback")
-        player.pause()
-        player.prepare()
-        player.play()
-        return
-    }
-    
-    // ✅ Handle URL expiration or connection errors - auto retry once
-    val cause = error.cause
-if (cause is HttpDataSource.HttpDataSourceException || 
-    cause is HttpDataSource.InvalidResponseCodeException) {
-    
-    android.util.Log.w("PlayerService", "Network/HTTP error - Attempting to refresh and retry")
-    
-    // Retry playback dengan prepare ulang
-    val currentPosition = player.currentPosition
-    val currentMediaItem = player.currentMediaItem
-    
-    if (currentMediaItem != null) {
-        player.setMediaItem(currentMediaItem)
-        player.seekTo(currentPosition)
-        player.prepare()
-        player.play()
-    }
-    
-    return
-}
+        if (
+            error.findCause<InvalidResponseCodeException>()?.responseCode == 416
+        ) {
+            player.pause()
+            player.prepare()
+            player.play()
+            return
+        }
 
-    // ✅ Skip ke lagu berikutnya kalo auto-skip enabled
-    if (!PlayerPreferences.skipOnError || !player.hasNextMediaItem()) return
+        if (!PlayerPreferences.skipOnError || !player.hasNextMediaItem()) return
 
-    val prev = player.currentMediaItem ?: return
-    player.seekToNextMediaItem()
+        val prev = player.currentMediaItem ?: return
+        player.seekToNextMediaItem()
 
-    ServiceNotifications.autoSkip.sendNotification(this) {
-        this
-            .setSmallIcon(R.drawable.alert_circle)
-            .setCategory(NotificationCompat.CATEGORY_ERROR)
-            .setOnlyAlertOnce(false)
-            .setContentIntent(activityPendingIntent<MainActivity>())
-            .setContentText(
-                prev.mediaMetadata.title?.let {
-                    getString(R.string.skip_on_error_notification, it)
-                } ?: getString(R.string.skip_on_error_notification_unknown_song)
-            )
-            .setContentTitle(getString(R.string.skip_on_error))
-    }
+        ServiceNotifications.autoSkip.sendNotification(this) {
+            this
+                .setSmallIcon(R.drawable.alert_circle)
+                .setCategory(NotificationCompat.CATEGORY_ERROR)
+                .setOnlyAlertOnce(false)
+                .setContentIntent(activityPendingIntent<MainActivity>())
+                .setContentText(
+                    prev.mediaMetadata.title?.let {
+                        getString(R.string.skip_on_error_notification, it)
+                    } ?: getString(R.string.skip_on_error_notification_unknown_song)
+                )
+                .setContentTitle(getString(R.string.skip_on_error))
+        }
     }
 
     private fun updateMediaSessionQueue(timeline: Timeline) {
@@ -1465,18 +1436,10 @@ if (cause is HttpDataSource.HttpDataSourceException ||
                     .ranged(cachedUri.meta)
             } ?: run {
                 val (url, contentLength) = runBlocking(Dispatchers.IO) {
-                    val body = runBlocking(Dispatchers.IO) {
-    Innertube.player(PlayerBody(videoId = requestedMediaId))
-}?.getOrNull() ?: throw PlaybackException(
-    "Failed to retrieve player data",
-    null,
-    PlaybackException.ERROR_CODE_REMOTE_ERROR
-)
-
-val format = body.streamingData?.highestQualityFormat
-    ?: body.streamingData?.formats?.maxByOrNull { it.bitrate ?: 0 }
-    ?: body.streamingData?.adaptiveFormats?.firstOrNull { it.mimeType?.startsWith("audio/") == true }
-    ?: error("Could not find any adaptive format")
+                    val body = Innertube.player(PlayerBody(videoId = requestedMediaId))?.getOrThrow()
+                        ?: throw Exception("API response was null.")
+                    val format = body.streamingData?.highestQualityFormat
+                        ?: throw Exception("Could not find a playable audio format in the response.")
                     val finalUrl = format.findUrl(requestedMediaId)
                         ?: throw Exception("Failed to generate a playable URL from the selected format.")
                     Pair(finalUrl, format.contentLength)
