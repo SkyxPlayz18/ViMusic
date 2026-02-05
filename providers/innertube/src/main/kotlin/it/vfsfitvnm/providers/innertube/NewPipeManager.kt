@@ -54,11 +54,19 @@ private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
             throw ReCaptchaException("reCaptcha Challenge requested", url)
         }
 
-        val responseBodyToReturn = response.body?.string()
+        val responseBodyBytes = response.body?.bytes()
 
         val latestUrl = response.request.url.toString()
-        return Response(response.code, response.message, response.headers.toMultimap(), responseBodyToReturn, responseBodyToReturn?.toByteArray(), latestUrl)
-    }
+val responseBodyString = responseBodyBytes?.toString(Charsets.UTF_8)
+
+return Response(
+    response.code,
+    response.message,
+    response.headers.toMultimap(),
+    responseBodyString,
+    responseBodyBytes,
+    latestUrl
+)
 
     override fun executeAsync(request: Request, callback: AsyncCallback?): CancellableCall {
         TODO("Placeholder")
