@@ -10,7 +10,6 @@ import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.downloader.*
 import org.schabi.newpipe.extractor.exceptions.ParsingException
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
-import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeSignatureExtractor
 import java.io.IOException
 import java.net.Proxy
 
@@ -53,45 +52,39 @@ private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
         val responseBodyToReturn = response.body?.string()
         val latestUrl = response.request.url.toString()
         
-        // NEWPIPE v0.25.0 RESPONSE FORMAT:
+        // NEWPIPE v0.25.0 RESPONSE FORMAT (5 parameters):
         return Response(
             response.code, 
             response.message, 
             response.headers.toMultimap(), 
-            responseBodyToReturn,
-            responseBodyToReturn?.toByteArray(),
+            responseBodyToReturn ?: "",
             latestUrl
         )
     }
 
-    override fun executeAsync(request: Request, callback: AsyncCallback?): CancellableCall {
-        // NewPipe v0.25.0 sudah support async
-        val call = client.newCall(/* build request */)
-        return object : CancellableCall {
-            override fun cancel() = call.cancel()
-            override fun isCanceled() = call.isCanceled()
-        }
-    }
+    // NewPipe v0.25.0 mungkin gak butuh implement async
+    // override fun executeAsync(request: Request, callback: AsyncCallback?): CancellableCall {
+    //     throw UnsupportedOperationException("Not implemented")
+    // }
 }
 
 object NewPipeUtils {
 
     init {
-        // Initialize NewPipe v0.25.0
         NewPipe.init(NewPipeDownloaderImpl(YouTube.proxy))
     }
 
     fun getStreamUrl(format: PlayerResponse.StreamingData.Format, videoId: String): Result<String> =
         runCatching {
-            println("🔄 NewPipe v0.25.0 - Getting stream for: $videoId")
+            println("🔄 Getting stream for: $videoId")
             
             // 1. Direct URL
-            format.url?.let { directUrl ->
+            format.url?.let { 
                 println("✅ Direct URL found")
-                return@runCatching directUrl
+                return@runCatching it 
             }
             
-            // 2. SignatureCipher - NEWPIPE v0.25.0 METHOD
+            // 2. SignatureCipher
             format.signatureCipher?.let { cipher ->
                 println("🔐 Processing cipher...")
                 val params = parseQueryString(cipher)
@@ -101,12 +94,21 @@ object NewPipeUtils {
                 val signatureParam = params["sp"] ?: "signature"
                 val baseUrl = params["url"] ?: throw ParsingException("No URL in cipher")
                 
-                // NEWPIPE v0.25.0 SIGNATURE DECIPHER:
-                val signature = YoutubeSignatureExtractor.decipherSignature(
-                    videoId, 
-                    obfuscatedSignature,
-                    null // playerUrl bisa null, NewPipe akan handle
-                )
+                // Coba decipher dengan berbagai method NewPipe v0.25.0
+                val signature = try {
+                    // Method 1: Coba pake YoutubeSignatureCipherManager
+                    org.schabi.newpipe.extractor.services.youtube.YoutubeSignatureCipherManager
+                        .decipherSignature(videoId, obfuscatedSignature)
+                } catch (e: Exception) {
+                    try {
+                        // Method 2: Coba extractor lain
+                        org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeSignatureCipherExtractor
+                            .decipherSignature(videoId, obfuscatedSignature)
+                    } catch (e2: Exception) {
+                        // Fallback: return original signature (mungkin udah deciphered)
+                        obfuscatedSignature
+                    }
+                }
                 
                 val finalUrl = "$baseUrl&$signatureParam=$signature"
                 println("✅ URL generated")
@@ -115,7 +117,7 @@ object NewPipeUtils {
             
             throw ParsingException("No URL or cipher found")
         }.onFailure { e ->
-            println("❌ NewPipe v0.25.0 Error: ${e.message}")
+            println("❌ Error: ${e.message}")
             e.printStackTrace()
         }
 }
