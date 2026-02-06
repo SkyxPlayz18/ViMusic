@@ -48,16 +48,15 @@ private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
 
         val response = client.newCall(requestBuilder.build()).execute()
 
-        if (response.code == 429) {
-            response.close()
+if (response.code == 429) {
+    response.close()
+    throw ReCaptchaException("reCaptcha Challenge requested", url)
+}
 
-            throw ReCaptchaException("reCaptcha Challenge requested", url)
-        }
-
-        val responseBodyBytes = response.body?.bytes()
-
-        val latestUrl = response.request.url.toString()
+val responseBodyBytes = response.body?.bytes()
 val responseBodyString = responseBodyBytes?.toString(Charsets.UTF_8)
+
+val latestUrl = response.request.url.toString()
 
 return Response(
     response.code,
