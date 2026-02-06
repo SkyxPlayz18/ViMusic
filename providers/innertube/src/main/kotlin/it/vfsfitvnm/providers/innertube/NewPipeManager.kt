@@ -1,17 +1,18 @@
-package it.vfsfitvnm.providers.innertube
+package com.zionhuang.innertube
 
-import it.vfsfitvnm.providers.innertube.models.PlayerResponse
+import com.zionhuang.innertube.models.YouTubeClient
+import com.zionhuang.innertube.models.response.PlayerResponse
 import io.ktor.http.URLBuilder
 import io.ktor.http.parseQueryString
-import it.vfsfitvnm.providers.innertube.models.UserAgents
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.schabi.newpipe.extractor.NewPipe
-import org.schabi.newpipe.extractor.downloader.*
+import org.schabi.newpipe.extractor.downloader.Downloader
+import org.schabi.newpipe.extractor.downloader.Request
+import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.exceptions.ParsingException
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
-import org.schabi.newpipe.extractor.services.youtube.YoutubeSignatureCipherManager
-import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeSignatureCipherExtractor
+import org.schabi.newpipe.extractor.services.youtube.YoutubeJavaScriptPlayerManager
 import java.io.IOException
 import java.net.Proxy
 
@@ -31,7 +32,7 @@ private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
         val requestBuilder = okhttp3.Request.Builder()
             .method(httpMethod, dataToSend?.toRequestBody())
             .url(url)
-            .addHeader("User-Agent", UserAgents.ANDROID)
+            .addHeader("User-Agent", YouTubeClient.USER_AGENT_WEB)
 
         headers.forEach { (headerName, headerValueList) ->
             if (headerValueList.size > 1) {
@@ -48,26 +49,16 @@ private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
 
         if (response.code == 429) {
             response.close()
+
             throw ReCaptchaException("reCaptcha Challenge requested", url)
         }
 
         val responseBodyToReturn = response.body?.string()
+
         val latestUrl = response.request.url.toString()
-        
-        // NEWPIPE v0.25.0 RESPONSE FORMAT (5 parameters):
-        return Response(
-            response.code, 
-            response.message, 
-            response.headers.toMultimap(), 
-            responseBodyToReturn ?: "",
-            latestUrl
-        )
+        return Response(response.code, response.message, response.headers.toMultimap(), responseBodyToReturn, latestUrl)
     }
 
-    // NewPipe v0.25.0 mungkin gak butuh implement async
-    // override fun executeAsync(request: Request, callback: AsyncCallback?): CancellableCall {
-    //     throw UnsupportedOperationException("Not implemented")
-    // }
 }
 
 object NewPipeUtils {
@@ -76,50 +67,32 @@ object NewPipeUtils {
         NewPipe.init(NewPipeDownloaderImpl(YouTube.proxy))
     }
 
+    fun getSignatureTimestamp(videoId: String): Result<Int> = runCatching {
+        YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId)
+    }
+
     fun getStreamUrl(format: PlayerResponse.StreamingData.Format, videoId: String): Result<String> =
         runCatching {
-            println("🔄 Getting stream for: $videoId")
-            
-            // 1. Direct URL
-            format.url?.let { 
-                println("✅ Direct URL found")
-                return@runCatching it 
-            }
-            
-            // 2. SignatureCipher
-            format.signatureCipher?.let { cipher ->
-                println("🔐 Processing cipher...")
-                val params = parseQueryString(cipher)
-                
-                val obfuscatedSignature = params["s"] 
-                    ?: throw ParsingException("No signature in cipher")
-                val signatureParam = params["sp"] ?: "signature"
-                val baseUrl = params["url"] ?: throw ParsingException("No URL in cipher")
-                
-                // Coba decipher dengan berbagai method NewPipe v0.25.0
-                val signature = try {
-                    // Method 1: Coba pake YoutubeSignatureCipherManager
-                    org.schabi.newpipe.extractor.services.youtube.YoutubeSignatureCipherManager
-                        .decipherSignature(videoId, obfuscatedSignature)
-                } catch (e: Exception) {
-                    try {
-                        // Method 2: Coba extractor lain
-                        org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeSignatureCipherExtractor
-                            .decipherSignature(videoId, obfuscatedSignature)
-                    } catch (e2: Exception) {
-                        // Fallback: return original signature (mungkin udah deciphered)
+            val url = format.url ?: format.signatureCipher?.let { signatureCipher ->
+                val params = parseQueryString(signatureCipher)
+                val obfuscatedSignature = params["s"]
+                    ?: throw ParsingException("Could not parse cipher signature")
+                val signatureParam = params["sp"]
+                    ?: throw ParsingException("Could not parse cipher signature parameter")
+                val url = params["url"]?.let { URLBuilder(it) }
+                    ?: throw ParsingException("Could not parse cipher url")
+                url.parameters[signatureParam] =
+                    YoutubeJavaScriptPlayerManager.deobfuscateSignature(
+                        videoId,
                         obfuscatedSignature
-                    }
-                }
-                
-                val finalUrl = "$baseUrl&$signatureParam=$signature"
-                println("✅ URL generated")
-                return@runCatching finalUrl
-            }
-            
-            throw ParsingException("No URL or cipher found")
-        }.onFailure { e ->
-            println("❌ Error: ${e.message}")
-            e.printStackTrace()
+                    )
+                url.toString()
+            } ?: throw ParsingException("Could not find format url")
+
+            return@runCatching YoutubeJavaScriptPlayerManager.getUrlWithThrottlingParameterDeobfuscated(
+                videoId,
+                url
+            )
         }
+
 }
