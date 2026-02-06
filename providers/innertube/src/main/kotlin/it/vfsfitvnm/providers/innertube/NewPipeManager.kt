@@ -10,6 +10,8 @@ import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.downloader.*
 import org.schabi.newpipe.extractor.exceptions.ParsingException
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
+import org.schabi.newpipe.extractor.services.youtube.YoutubeSignatureCipherManager
+import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeSignatureCipherExtractor
 import java.io.IOException
 import java.net.Proxy
 
