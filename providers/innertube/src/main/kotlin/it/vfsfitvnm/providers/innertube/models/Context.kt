@@ -229,6 +229,27 @@ val WebCreator = Context(
         music = true
     )
 )
+
+val DefaultTV = Context(
+    client = Client(
+        clientId = 85,
+        clientName = "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+        clientVersion = "2.0",  // Tetap 2.0 (konsisten dengan Metrolist)
+        userAgent = "Mozilla/5.0 (PlayStation; PlayStation 4/12.02) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.4 Safari/605.1.15",
+        referer = "https://www.youtube.com/",
+        music = true
+    )
+)
+
+val DefaultVR = Context(
+    client = Client(
+        clientName = "ANDROID_VR",
+        clientVersion = "1.61.48",  // Versi dari Metrolist ANDROID_VR_1_61_48
+        clientId = 28,
+        userAgent = "com.google.android.apps.youtube.vr.oculus/1.61.48 (Linux; U; Android 12; en_US; Quest 3; Build/SQ3A.220605.009.A1; Cronet/132.0.6808.3)",
+        music = false
+    )
+)
     }
 }
 
