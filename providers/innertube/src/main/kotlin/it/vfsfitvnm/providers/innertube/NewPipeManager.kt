@@ -32,7 +32,7 @@ private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
         val requestBuilder = okhttp3.Request.Builder()
             .method(httpMethod, dataToSend?.toRequestBody())
             .url(url)
-            .addHeader("User-Agent", UserAgents.ANDROID)
+            .addHeader("User-Agent", UserAgents.DESKTOP)
 
         headers.forEach { (headerName, headerValueList) ->
             headerValueList.forEach { headerValue ->
