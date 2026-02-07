@@ -1,9 +1,9 @@
-package com.zionhuang.innertube
+package it.vfsfitvnm.providers.innertube
 
-import com.zionhuang.innertube.models.YouTubeClient
-import com.zionhuang.innertube.models.response.PlayerResponse
+import it.vfsfitvnm.providers.innertube.models.PlayerResponse
 import io.ktor.http.URLBuilder
 import io.ktor.http.parseQueryString
+import it.vfsfitvnm.providers.innertube.models.UserAgents
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.schabi.newpipe.extractor.NewPipe
@@ -32,7 +32,7 @@ private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
         val requestBuilder = okhttp3.Request.Builder()
             .method(httpMethod, dataToSend?.toRequestBody())
             .url(url)
-            .addHeader("User-Agent", YouTubeClient.USER_AGENT_WEB)
+            .addHeader("User-Agent", UserAgents.ANDROID) // ← PAKAI ANDROID, BUKAN DESKTOP
 
         headers.forEach { (headerName, headerValueList) ->
             if (headerValueList.size > 1) {
@@ -49,16 +49,19 @@ private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
 
         if (response.code == 429) {
             response.close()
-
             throw ReCaptchaException("reCaptcha Challenge requested", url)
         }
 
         val responseBodyToReturn = response.body?.string()
-
         val latestUrl = response.request.url.toString()
-        return Response(response.code, response.message, response.headers.toMultimap(), responseBodyToReturn, latestUrl)
+        
+        // ← FIX INI! 5 PARAMETERS SEPERTI OUTERTUNE
+        return Response(response.code, response.message, response.headers.toMultimap(), 
+                        responseBodyToReturn, latestUrl)
     }
 
+    // Outertune gak implement executeAsync, kita juga gak perlu
+    // override fun executeAsync(...) { TODO() }
 }
 
 object NewPipeUtils {
@@ -67,32 +70,59 @@ object NewPipeUtils {
         NewPipe.init(NewPipeDownloaderImpl(YouTube.proxy))
     }
 
-    fun getSignatureTimestamp(videoId: String): Result<Int> = runCatching {
-        YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId)
-    }
-
     fun getStreamUrl(format: PlayerResponse.StreamingData.Format, videoId: String): Result<String> =
         runCatching {
+            println("🔍 DEBUG: Getting stream for video: $videoId")
+            println("🔍 DEBUG: Format URL: ${format.url}")
+            println("🔍 DEBUG: Has cipher: ${format.signatureCipher != null}")
+            
             val url = format.url ?: format.signatureCipher?.let { signatureCipher ->
+                println("🔍 DEBUG: Processing cipher...")
                 val params = parseQueryString(signatureCipher)
+                
                 val obfuscatedSignature = params["s"]
-                    ?: throw ParsingException("Could not parse cipher signature")
+                    ?: {
+                        println("❌ DEBUG: No 's' parameter in cipher")
+                        throw ParsingException("Could not parse cipher signature")
+                    }()
+                    
                 val signatureParam = params["sp"]
-                    ?: throw ParsingException("Could not parse cipher signature parameter")
+                    ?: {
+                        println("❌ DEBUG: No 'sp' parameter in cipher")
+                        throw ParsingException("Could not parse cipher signature parameter")
+                    }()
+                    
                 val url = params["url"]?.let { URLBuilder(it) }
-                    ?: throw ParsingException("Could not parse cipher url")
-                url.parameters[signatureParam] =
-                    YoutubeJavaScriptPlayerManager.deobfuscateSignature(
-                        videoId,
-                        obfuscatedSignature
-                    )
-                url.toString()
-            } ?: throw ParsingException("Could not find format url")
+                    ?: {
+                        println("❌ DEBUG: No 'url' parameter in cipher")
+                        throw ParsingException("Could not parse cipher url")
+                    }()
+                
+                println("🔍 DEBUG: Deciphering signature...")
+                val signature = YoutubeJavaScriptPlayerManager.deobfuscateSignature(
+                    videoId,
+                    obfuscatedSignature
+                )
+                
+                url.parameters[signatureParam] = signature
+                val resultUrl = url.toString()
+                println("✅ DEBUG: Generated URL: ${resultUrl.take(100)}...")
+                resultUrl
+            } ?: {
+                println("❌ DEBUG: No URL or cipher found")
+                throw ParsingException("Could not find format url")
+            }()
 
+            println("✅ DEBUG: Final URL obtained")
             return@runCatching YoutubeJavaScriptPlayerManager.getUrlWithThrottlingParameterDeobfuscated(
                 videoId,
                 url
             )
+        }.onFailure { e ->
+            println("🔥 CRITICAL ERROR in getStreamUrl:")
+            println("   Video ID: $videoId")
+            println("   Error: ${e.javaClass.simpleName}")
+            println("   Message: ${e.message}")
+            e.printStackTrace()
         }
-
 }
