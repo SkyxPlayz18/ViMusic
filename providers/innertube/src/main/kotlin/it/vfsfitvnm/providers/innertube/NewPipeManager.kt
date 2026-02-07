@@ -72,10 +72,9 @@ private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
 object NewPipeUtils {
 
     init {
-        init {
     // NewPipe v0.25.0+ init format: NewPipe.init(downloader, localization)
     NewPipe.init(NewPipeDownloaderImpl(YouTube.proxy))
-    // ATAU jika perlu localization:
+    
         }
     }
 
