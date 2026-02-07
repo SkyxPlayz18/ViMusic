@@ -72,8 +72,11 @@ private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
 object NewPipeUtils {
 
     init {
-        // Initialize NewPipe dengan timeout
-        NewPipe.init(NewPipeDownloaderImpl(YouTube.proxy), 30000L)
+        init {
+    // NewPipe v0.25.0+ init format: NewPipe.init(downloader, localization)
+    NewPipe.init(NewPipeDownloaderImpl(YouTube.proxy))
+    // ATAU jika perlu localization:
+        }
     }
 
     fun getStreamUrl(format: PlayerResponse.StreamingData.Format, videoId: String): Result<String> =
@@ -131,7 +134,7 @@ object NewPipeUtils {
                 println("  Cipher preview: ${format.signatureCipher!!.take(200)}...")
                 try {
                     val params = parseQueryString(format.signatureCipher!!)
-                    println("  Cipher params: ${params.keys.joinToString()}")
+                    println("  Cipher params: ${params.entries().joinToString()}")
                 } catch (ex: Exception) {
                     println("  Failed to parse cipher: ${ex.message}")
                 }
