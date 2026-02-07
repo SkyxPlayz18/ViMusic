@@ -229,6 +229,8 @@ val WebCreator = Context(
         music = true
     )
 )
+    }
+}
 
 // @formatter:off
 @Suppress("MaximumLineLength")
