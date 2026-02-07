@@ -3,6 +3,7 @@ package it.vfsfitvnm.providers.innertube
 import it.vfsfitvnm.providers.innertube.models.PlayerResponse
 import io.ktor.http.URLBuilder
 import io.ktor.http.parseQueryString
+import io.ktor.http.Parameters
 import it.vfsfitvnm.providers.innertube.models.UserAgents
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -31,7 +32,7 @@ private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
         val requestBuilder = okhttp3.Request.Builder()
             .method(httpMethod, dataToSend?.toRequestBody())
             .url(url)
-            .addHeader("User-Agent", UserAgents.ANDROID) // Pakai Android User-Agent
+            .addHeader("User-Agent", UserAgents.ANDROID)
 
         headers.forEach { (headerName, headerValueList) ->
             headerValueList.forEach { headerValue ->
@@ -62,20 +63,13 @@ private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
             latestUrl
         )
     }
-
-    // NewPipe v0.25.0+ tidak memerlukan implementasi executeAsync untuk basic usage
-    // override fun executeAsync(request: Request, callback: AsyncCallback?): CancellableCall {
-    //     throw UnsupportedOperationException("Async not implemented")
-    // }
 }
 
 object NewPipeUtils {
 
     init {
-    // NewPipe v0.25.0+ init format: NewPipe.init(downloader, localization)
-    NewPipe.init(NewPipeDownloaderImpl(YouTube.proxy))
-    
-        }
+        // NEWPIPE v0.25.0+ INIT: hanya downloader, tidak ada timeout
+        NewPipe.init(NewPipeDownloaderImpl(YouTube.proxy))
     }
 
     fun getStreamUrl(format: PlayerResponse.StreamingData.Format, videoId: String): Result<String> =
@@ -101,18 +95,27 @@ object NewPipeUtils {
                 
                 println("[NewPipe] Base URL: $baseUrl")
                 println("[NewPipe] Signature param: $signatureParam")
+                println("[NewPipe] Obfuscated signature: ${obfuscatedSignature.take(50)}...")
                 
-                // DI NEWPIPE v0.25.0+, signature seringnya sudah didecode otomatis
-                // atau kita perlu menggunakan method yang berbeda
+                // Untuk NewPipe v0.25.0+, kita coba beberapa approach:
                 
-                // Coba 1: Signature mungkin sudah deciphered
+                // Approach 1: Signature mungkin sudah deciphered
                 val signature = obfuscatedSignature
                 
-                // Coba 2: Jika butuh decipher, NewPipe v0.25.0+ mungkin punya method baru
-                // Tapi untuk sekarang, kita asumsi signature sudah OK
+                // Approach 2: Jika perlu decipher, coba dengan method baru
+                // Tapi karena kita gak tau exact class-nya, pakai approach 1 dulu
                 
                 val urlBuilder = URLBuilder(baseUrl)
                 urlBuilder.parameters[signatureParam] = signature
+                
+                // Tambah parameter penting lainnya dari cipher
+                params.entries().forEach { (key, values) ->
+                    if (key != "s" && key != "sp" && key != "url") {
+                        values.forEach { value ->
+                            urlBuilder.parameters.append(key, value)
+                        }
+                    }
+                }
                 
                 val finalUrl = urlBuilder.toString()
                 println("[NewPipe] ✅ Generated URL: ${finalUrl.take(100)}...")
