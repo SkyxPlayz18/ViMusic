@@ -5,7 +5,6 @@ import io.ktor.http.URLBuilder
 import io.ktor.http.parseQueryString
 import it.vfsfitvnm.providers.innertube.models.UserAgents
 import okhttp3.OkHttpClient
-import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.downloader.Downloader
@@ -29,17 +28,16 @@ private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
             .url(request.url())
             .addHeader("User-Agent", UserAgents.DESKTOP)
 
-        // FIX 1: Handle nullable RequestBody untuk v0.25.2
         when (request.httpMethod()) {
-            "GET" -> Unit // default
+            "GET" -> Unit
             "POST" -> {
-                val body = request.dataToSend()?.toRequestBody()
-                requestBuilder.post(body ?: "".toRequestBody()) // NON-NULL FIX
+                val body = request.dataToSend()?.toRequestBody() ?: "".toRequestBody()
+                requestBuilder.post(body)
                 requestBuilder.addHeader("Content-Type", "application/x-www-form-urlencoded")
             }
             else -> {
-                val body = request.dataToSend()?.toRequestBody()
-                requestBuilder.method(request.httpMethod(), body ?: "".toRequestBody())
+                val body = request.dataToSend()?.toRequestBody() ?: "".toRequestBody()
+                requestBuilder.method(request.httpMethod(), body)
             }
         }
 
@@ -58,8 +56,7 @@ private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
 
         val responseBody = response.body?.string()
         
-        // FIX 2: Response constructor untuk v0.25.2
-        // Coba constructor dengan 5 parameter (tanpa byte array)
+        // v0.25.2: Response dengan 5 parameter (tanpa byte array)
         return Response(
             response.code,
             response.message,
@@ -73,11 +70,7 @@ private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
 object NewPipeUtils {
 
     init {
-        // Init NewPipe dengan proxy
         NewPipe.init(NewPipeDownloaderImpl(YouTube.proxy))
-        
-        // FIX 3: v0.25.2 TIDAK PERLU init() untuk YoutubeJavaScriptPlayerManager
-        // Class ini auto-init atau init via NewPipe.init()
         println("[NewPipe] Initialized for NewPipe v0.25.2")
     }
 
@@ -85,7 +78,7 @@ object NewPipeUtils {
         runCatching {
             // 1. Direct URL
             if (format.url != null) {
-                println("[NewPipe] Using direct URL for $videoId")
+                println("[NewPipe] ✅ Direct URL for $videoId")
                 return@runCatching format.url!!
             }
 
@@ -97,16 +90,13 @@ object NewPipeUtils {
             val signatureParam = params["sp"] ?: "signature"
             val baseUrl = params["url"] ?: throw ParsingException("No 'url' in cipher")
 
-            println("[NewPipe] Deciphering signature for $videoId")
+            println("[NewPipe] 🔐 Deciphering for $videoId")
 
-            // FIX 4: Method deobfuscateSignature mungkin berubah di v0.25.2
-            val signature = try {
-                // Coba dengan 2 parameter (videoId, signature)
-                YoutubeJavaScriptPlayerManager.deobfuscateSignature(videoId, obfuscatedSignature)
-            } catch (e: NoSuchMethodError) {
-                // Fallback ke method lama (1 parameter)
-                YoutubeJavaScriptPlayerManager.deobfuscateSignature(obfuscatedSignature)
-            }
+            // v0.25.2: deobfuscateSignature dengan 2 PARAMETER!
+            val signature = YoutubeJavaScriptPlayerManager.deobfuscateSignature(
+                videoId,              // VIDEO ID
+                obfuscatedSignature   // OBFUSCATED SIGNATURE
+            )
 
             // Build URL
             val urlBuilder = URLBuilder(baseUrl)
@@ -120,19 +110,19 @@ object NewPipeUtils {
             }
 
             val urlWithSignature = urlBuilder.toString()
+            println("[NewPipe] 🔗 URL with signature: ${urlWithSignature.take(100)}...")
 
-            // FIX 5: getUrlWithThrottlingParameterDeobfuscated mungkin juga berubah
-            return@runCatching try {
-                YoutubeJavaScriptPlayerManager.getUrlWithThrottlingParameterDeobfuscated(
-                    videoId,
-                    urlWithSignature
-                )
-            } catch (e: Exception) {
-                // Fallback ke URL tanpa throttling parameter
-                println("[NewPipe] Warning: Failed to add throttling parameter: ${e.message}")
+            // v0.25.2: getUrlWithThrottlingParameterDeobfuscated
+            val finalUrl = YoutubeJavaScriptPlayerManager.getUrlWithThrottlingParameterDeobfuscated(
+                videoId,
                 urlWithSignature
-            }
+            )
+            
+            println("[NewPipe] ✅ Final URL: ${finalUrl.take(100)}...")
+            return@runCatching finalUrl
         }.onFailure { e ->
-            println("[NewPipe] ERROR getting stream URL for $videoId: ${e.message}")
+            println("[NewPipe] ❌ ERROR for $videoId: ${e.javaClass.simpleName}")
+            println("  Message: ${e.message}")
+            e.printStackTrace()
         }
 }
