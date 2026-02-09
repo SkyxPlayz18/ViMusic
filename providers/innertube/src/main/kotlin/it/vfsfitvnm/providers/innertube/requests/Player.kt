@@ -71,7 +71,6 @@ private fun validateStreamUrl(url: String): Boolean {
     } catch (_: Exception) {
         false
     }
-    */
 }
 
 /**
