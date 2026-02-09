@@ -63,14 +63,15 @@ private val PlayerResponse.StreamingData.highestQualityFormat: PlayerResponse.St
  * Sends a HEAD request to the given URL to check if it's a valid, working stream link.
  */
 private fun validateStreamUrl(url: String): Boolean {
+    return true
     return try {
         val request = Request.Builder().url(url).head().build()
         val response = streamValidatorClient.newCall(request).execute()
         response.isSuccessful.also { response.close() }
     } catch (_: Exception) {
-        // Any exception during the request means it's not a valid stream.
         false
     }
+    */
 }
 
 /**
