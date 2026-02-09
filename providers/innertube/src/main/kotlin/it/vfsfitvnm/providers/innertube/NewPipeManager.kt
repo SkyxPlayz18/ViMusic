@@ -7,7 +7,6 @@ import it.vfsfitvnm.providers.innertube.models.UserAgents
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.schabi.newpipe.extractor.NewPipe
-import org.schabi.newpipe.extractor.downloader.CancellableCall
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
@@ -20,80 +19,108 @@ import java.net.Proxy
 private class NewPipeDownloaderImpl(proxy: Proxy?) : Downloader() {
 
     private val client = OkHttpClient.Builder()
-        .proxy(proxy)
+        .apply { if (proxy != null) proxy(proxy) }
         .build()
 
     @Throws(IOException::class, ReCaptchaException::class)
     override fun execute(request: Request): Response {
-        val httpMethod = request.httpMethod()
-        val url = request.url()
-        val headers = request.headers()
-        val dataToSend = request.dataToSend()
-
         val requestBuilder = okhttp3.Request.Builder()
-            .method(httpMethod, dataToSend?.toRequestBody())
-            .url(url)
+            .url(request.url())
             .addHeader("User-Agent", UserAgents.DESKTOP)
 
-        headers.forEach { (headerName, headerValueList) ->
-            if (headerValueList.size > 1) {
-                requestBuilder.removeHeader(headerName)
-                headerValueList.forEach { headerValue ->
-                    requestBuilder.addHeader(headerName, headerValue)
-                }
-            } else if (headerValueList.size == 1) {
-                requestBuilder.header(headerName, headerValueList[0])
+        when (request.httpMethod()) {
+            "GET" -> Unit // default is GET
+            "POST" -> {
+                requestBuilder.post(request.dataToSend()?.toRequestBody())
+                requestBuilder.addHeader("Content-Type", "application/x-www-form-urlencoded")
             }
+            else -> requestBuilder.method(request.httpMethod(), request.dataToSend()?.toRequestBody())
         }
+
+        request.headers().forEach { (name, values) ->
+            values.forEach { value -> requestBuilder.addHeader(name, value) }
+        }
+
+        requestBuilder.addHeader("Accept-Language", "en-US,en;q=0.9")
 
         val response = client.newCall(requestBuilder.build()).execute()
 
         if (response.code == 429) {
             response.close()
-
-            throw ReCaptchaException("reCaptcha Challenge requested", url)
+            throw ReCaptchaException("reCaptcha Challenge requested", request.url())
         }
 
-        val responseBodyToReturn = response.body?.string()
-
-        val latestUrl = response.request.url.toString()
-        return Response(response.code, response.message, response.headers.toMultimap(), responseBodyToReturn, responseBodyToReturn?.toByteArray(), latestUrl)
+        val responseBody = response.body?.string()
+        
+        return Response(
+            response.code,
+            response.message,
+            response.headers.toMultimap(),
+            responseBody,
+            responseBody?.toByteArray(),
+            response.request.url.toString()
+        )
     }
-
-    override fun executeAsync(request: Request, callback: AsyncCallback?): CancellableCall {
-        TODO("Placeholder")
-    }
-
 }
 
 object NewPipeUtils {
 
     init {
+        // Init NewPipe dengan proxy support
         NewPipe.init(NewPipeDownloaderImpl(YouTube.proxy))
+        
+        // Juga init YoutubeJavaScriptPlayerManager untuk signature decipher
+        try {
+            YoutubeJavaScriptPlayerManager.init(YouTube.proxy)
+        } catch (e: Exception) {
+            println("[NewPipe] Warning: Failed to init YoutubeJavaScriptPlayerManager: ${e.message}")
+        }
     }
 
     fun getStreamUrl(format: PlayerResponse.StreamingData.Format, videoId: String): Result<String> =
         runCatching {
-            val url = format.url ?: format.signatureCipher?.let { signatureCipher ->
-                val params = parseQueryString(signatureCipher)
-                val obfuscatedSignature = params["s"]
-                    ?: throw ParsingException("Could not parse cipher signature")
-                val signatureParam = params["sp"]
-                    ?: throw ParsingException("Could not parse cipher signature parameter")
-                val url = params["url"]?.let { URLBuilder(it) }
-                    ?: throw ParsingException("Could not parse cipher url")
-                url.parameters[signatureParam] =
-                    YoutubeJavaScriptPlayerManager.deobfuscateSignature(
-                        videoId,
-                        obfuscatedSignature
-                    )
-                url.toString()
-            } ?: throw ParsingException("Could not find format url")
+            // 1. Direct URL (no cipher)
+            if (format.url != null) {
+                println("[NewPipe] Using direct URL for $videoId")
+                return@runCatching format.url!!
+            }
 
+            // 2. Signature cipher
+            val cipher = format.signatureCipher ?: throw ParsingException("No URL or cipher found")
+            
+            val params = parseQueryString(cipher)
+            val obfuscatedSignature = params["s"] ?: throw ParsingException("No 's' in cipher")
+            val signatureParam = params["sp"] ?: "signature"
+            val baseUrl = params["url"] ?: throw ParsingException("No 'url' in cipher")
+
+            println("[NewPipe] Deciphering signature for $videoId")
+
+            // DECIPHER SIGNATURE menggunakan NewPipe v0.25.0+
+            val signature = YoutubeJavaScriptPlayerManager.deobfuscateSignature(
+                videoId,
+                obfuscatedSignature
+            )
+
+            // Build URL dengan signature
+            val urlBuilder = URLBuilder(baseUrl)
+            urlBuilder.parameters[signatureParam] = signature
+
+            // Add other cipher parameters
+            params.entries().forEach { (key, values) ->
+                if (key !in listOf("s", "sp", "url")) {
+                    values.forEach { value -> urlBuilder.parameters.append(key, value) }
+                }
+            }
+
+            val urlWithSignature = urlBuilder.toString()
+
+            // ADD THROTTLING PARAMETER (penting untuk v0.25.0+)
             return@runCatching YoutubeJavaScriptPlayerManager.getUrlWithThrottlingParameterDeobfuscated(
                 videoId,
-                url
+                urlWithSignature
             )
+        }.onFailure { e ->
+            println("[NewPipe] ERROR getting stream URL for $videoId: ${e.message}")
+            e.printStackTrace()
         }
-
 }
